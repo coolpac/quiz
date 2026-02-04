@@ -1,6 +1,5 @@
-import { prisma } from "../src/lib/prisma";
+import { prisma } from "./lib/prisma";
 import {
-  getConsumerHeartbeatTtl,
   getRedisClient,
   getStreamLength,
   isRedisEnabled,
@@ -11,10 +10,11 @@ import {
   removeEmptyStream,
   setConsumerHeartbeat,
   writeAnswers,
-} from "../src/services/answerStream";
+} from "./services/answerStream";
 
 const POLL_INTERVAL_MS = Number(process.env.ANSWER_STREAM_POLL_MS ?? 500);
 const BATCH_SIZE = Number(process.env.ANSWER_STREAM_BATCH_SIZE ?? 500);
+const ALERT_THRESHOLD = Number(process.env.ANSWER_BACKLOG_GROW_THRESHOLD ?? 3);
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -53,7 +53,6 @@ const main = async () => {
   console.info("[consumer] started");
   let lastBacklog = 0;
   let growthStreak = 0;
-  const alertThreshold = Number(process.env.ANSWER_BACKLOG_GROW_THRESHOLD ?? 3);
 
   while (true) {
     const keys = await listStreamKeys();
@@ -67,7 +66,7 @@ const main = async () => {
     } else {
       growthStreak = 0;
     }
-    const alert = backlogTotal > 0 && growthStreak >= alertThreshold;
+    const alert = backlogTotal > 0 && growthStreak >= ALERT_THRESHOLD;
     if (alert) {
       console.warn(
         `[consumer] backlog growing (current ${backlogTotal}, previous ${lastBacklog})`,

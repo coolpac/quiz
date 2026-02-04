@@ -5,6 +5,7 @@ import './index.css';
 import App from './App.tsx';
 import { setTelegramInitData } from './api';
 import { initWebPerf } from './lib/perf';
+import { initTelegramUi } from './lib/telegramUi';
 
 type LaunchData = {
   quizId?: string;
@@ -56,6 +57,7 @@ const getLaunchData = (): LaunchData => {
 const launchData = getLaunchData();
 setTelegramInitData(launchData.initDataRaw);
 initWebPerf();
+initTelegramUi();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

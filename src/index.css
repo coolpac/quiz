@@ -81,6 +81,9 @@
   }
   body {
     @apply bg-background text-foreground antialiased;
+    touch-action: manipulation;
+    overscroll-behavior: none;
+    -webkit-text-size-adjust: 100%;
   }
 }
 

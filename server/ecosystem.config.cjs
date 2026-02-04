@@ -11,8 +11,7 @@ module.exports = {
     {
       name: "quiz-consumer",
       cwd: __dirname,
-      script: "node_modules/.bin/tsx",
-      args: "scripts/answerStreamConsumer.ts",
+      script: "dist/consumer.js",
       env: {
         NODE_ENV: "production",
       },

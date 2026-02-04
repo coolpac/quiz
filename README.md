@@ -64,3 +64,25 @@ sudo systemctl enable --now quiz-consumer
 npm install
 npm run dev
 ```
+
+## Docker Deploy
+```
+cp server/.env.example server/.env
+cp .env.example .env
+```
+
+Build + run:
+```
+docker compose -f docker-compose.prod.yml up -d --build
+```
+
+### Server bootstrap + update scripts
+Bootstrap Docker on server:
+```
+DEPLOY_HOST=81.200.153.155 DEPLOY_USER=root ./deploy/bootstrap.sh
+```
+
+Sync and deploy updates:
+```
+DEPLOY_HOST=81.200.153.155 DEPLOY_USER=root ./deploy/update.sh
+```

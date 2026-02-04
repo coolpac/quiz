@@ -15,6 +15,7 @@ import { connectSocket, releaseSocket } from "../socket";
 import { Button } from "../components/ui/Button";
 import { cn } from "../lib/cn";
 import { useToast, type ToastVariant } from "../components/Toast";
+import { hapticImpact, hapticNotify, hapticSelection } from "../lib/telegramUi";
 import type { LiveFeedItem, QuizData, QuizResults } from "../types/quiz";
 
 type QuizViewProps = {
@@ -372,6 +373,9 @@ const QuizView = ({ quizId, onFinish, openedFromStartParam }: QuizViewProps) => 
       return;
     }
 
+    if (!timedOut) {
+      hapticImpact("rigid");
+    }
     setTimedOut(true);
     autoSkipTimerRef.current = window.setTimeout(() => {
       autoSkipTimerRef.current = null;
@@ -404,6 +408,7 @@ const QuizView = ({ quizId, onFinish, openedFromStartParam }: QuizViewProps) => 
       return;
     }
     setTimedOut(false);
+    hapticSelection();
 
     if (question.requiresSubscription) {
       setIsCheckingSub(true);
@@ -417,6 +422,7 @@ const QuizView = ({ quizId, onFinish, openedFromStartParam }: QuizViewProps) => 
           setApiError("Подписка не найдена. Попробуйте снова.");
           setLastFailedAnswer(index);
           pushToast("Подписка не найдена. Попробуйте снова.", "warning");
+          hapticNotify("warning");
           return;
         }
         setApiError(null);
@@ -426,6 +432,7 @@ const QuizView = ({ quizId, onFinish, openedFromStartParam }: QuizViewProps) => 
         setApiError("Не удалось проверить подписку");
         setLastFailedAnswer(index);
         pushToast("Не удалось проверить подписку", "error");
+        hapticNotify("error");
         return;
       } finally {
         setIsCheckingSub(false);
@@ -457,6 +464,7 @@ const QuizView = ({ quizId, onFinish, openedFromStartParam }: QuizViewProps) => 
 
       const answerScore = Number(response.score) || 0;
       const isCorrect = Boolean(response.isCorrect);
+      hapticNotify(isCorrect ? "success" : "error");
       const nextScore = score + answerScore;
       const nextCorrectCount = correctCount + (isCorrect ? 1 : 0);
 
@@ -485,6 +493,7 @@ const QuizView = ({ quizId, onFinish, openedFromStartParam }: QuizViewProps) => 
       setApiError("Не удалось отправить ответ. Попробуйте снова.");
       setLastFailedAnswer(index);
       pushToast("Не удалось отправить ответ. Попробуйте снова.", "error");
+      hapticNotify("error");
     }
   };
 

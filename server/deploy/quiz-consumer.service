@@ -7,7 +7,7 @@ Type=simple
 WorkingDirectory=/opt/quiz/server
 Environment=NODE_ENV=production
 EnvironmentFile=/opt/quiz/server/.env
-ExecStart=/usr/bin/npm run consume:answers
+ExecStart=/usr/bin/node /opt/quiz/server/dist/consumer.js
 Restart=always
 RestartSec=5
 

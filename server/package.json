@@ -10,7 +10,8 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
     "backfill:quiz-creators": "tsx scripts/backfillQuizCreators.ts",
-    "consume:answers": "tsx scripts/answerStreamConsumer.ts"
+    "consume:answers": "node dist/consumer.js",
+    "consume:answers:dev": "tsx src/consumer.ts"
   },
   "keywords": [],
   "author": "",
