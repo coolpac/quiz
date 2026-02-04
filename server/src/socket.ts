@@ -6,9 +6,19 @@ import { markPlayersCountDirty } from "./services/socketThrottle";
 import { adminRoom, quizRoom, setIO } from "./socketState";
 
 export const initSocket = (server: HttpServer) => {
+  const appOrigins = (process.env.APP_URL ?? "")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+  const appOrigin =
+    appOrigins.length > 0
+      ? appOrigins
+      : process.env.NODE_ENV === "production"
+        ? false
+        : true;
   const io = new Server(server, {
     cors: {
-      origin: process.env.APP_URL || "*",
+      origin: appOrigin,
     },
     pingInterval: 25000,
     pingTimeout: 20000,

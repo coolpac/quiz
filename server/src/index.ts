@@ -14,7 +14,16 @@ import { flushNow } from "./services/answerBuffer";
 import { prisma } from "./lib/prisma";
 
 const app = express();
-const appOrigin = process.env.APP_URL || "*";
+const appOrigins = (process.env.APP_URL ?? "")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+const appOrigin =
+  appOrigins.length > 0
+    ? appOrigins
+    : process.env.NODE_ENV === "production"
+      ? false
+      : true;
 app.use(
   cors({
     origin: appOrigin,

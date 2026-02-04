@@ -17,6 +17,7 @@ import {
 } from "../services/questionsCache";
 import { ValidationError, createQuiz } from "../services/quiz";
 import { checkSubscription } from "../services/subscription";
+import { getTelegramAvatarUrl } from "../services/telegramAvatar";
 import {
   clearLeaderboardCache,
   getLeaderboardUpdate,
@@ -171,12 +172,49 @@ router.post("/:id/answer", answerLimiter, async (req, res) => {
     timeLeft: number;
   };
 
+  const parsedQuestionIndex = Number(questionIndex);
+  const parsedAnswerIndex = Number(answerIndex);
+  const parsedTimeLeft = Number(timeLeft);
+
+  if (!Number.isInteger(parsedQuestionIndex) || parsedQuestionIndex < 0) {
+    res.status(400).json({ error: "Invalid question index" });
+    return;
+  }
+  if (!Number.isInteger(parsedAnswerIndex) || parsedAnswerIndex < 0) {
+    res.status(400).json({ error: "Invalid answer index" });
+    return;
+  }
+
+  const quiz = await prisma.quiz.findUnique({
+    where: { id },
+    select: { expiresAt: true },
+  });
+  if (!quiz) {
+    res.status(404).json({ error: "Quiz not found" });
+    return;
+  }
+  if (quiz.expiresAt < new Date()) {
+    res.status(410).json({ expired: true, message: "Квиз завершен" });
+    return;
+  }
+
   const questions = await getQuizQuestions(id);
+  if (parsedQuestionIndex >= questions.length) {
+    res.status(404).json({ error: "Question not found" });
+    return;
+  }
   await primeQuizStatsCache(id, questions);
-  const question = getCachedQuestion(id, questionIndex);
+  const question = getCachedQuestion(id, parsedQuestionIndex);
 
   if (!question) {
     res.status(404).json({ error: "Question not found" });
+    return;
+  }
+  if (
+    parsedAnswerIndex < 0 ||
+    parsedAnswerIndex >= (question.options?.length ?? 0)
+  ) {
+    res.status(400).json({ error: "Invalid answer index" });
     return;
   }
 
@@ -193,15 +231,15 @@ router.post("/:id/answer", answerLimiter, async (req, res) => {
     return;
   }
 
-  const isCorrect = answerIndex === question.correctIndex;
-  const safeTimeLeft = Math.max(0, Number(timeLeft) || 0);
+  const isCorrect = parsedAnswerIndex === question.correctIndex;
+  const safeTimeLeft = Math.max(0, parsedTimeLeft || 0);
   const score = isCorrect ? 100 + safeTimeLeft * 10 : 0;
 
   const enqueued = await enqueueAnswer({
     visitorId: visitor.id,
     questionId: question.id,
     quizId: id,
-    answerIndex,
+    answerIndex: parsedAnswerIndex,
     isCorrect,
     timeLeft: safeTimeLeft,
     score,
@@ -211,18 +249,20 @@ router.post("/:id/answer", answerLimiter, async (req, res) => {
     return;
   }
 
-  recordAnswer(id, questionIndex, answerIndex);
-  const stats = getStats(id, questionIndex);
+  recordAnswer(id, parsedQuestionIndex, parsedAnswerIndex);
+  const stats = getStats(id, parsedQuestionIndex);
 
   const playerName = visitor.username ? `@${visitor.username}` : visitor.firstName;
+  const avatarUrl = await getTelegramAvatarUrl(visitor.telegramId);
   emitAnswerEvents({
     quizId: id,
-    questionIndex,
-    answerIndex,
+    questionIndex: parsedQuestionIndex,
+    answerIndex: parsedAnswerIndex,
     isCorrect,
     score,
     visitorId: visitor.id,
     playerName,
+    avatarUrl,
   });
 
   res.json({
@@ -328,6 +368,11 @@ router.post("/:id/check-subscription", async (req, res) => {
     where: { id },
     select: { channelUrl: true },
   });
+  if (!quiz) {
+    res.status(404).json({ error: "Quiz not found" });
+    return;
+  }
+
   let channelId: string | null = null;
   const channelUrl = quiz?.channelUrl?.trim();
   if (channelUrl) {
@@ -337,11 +382,21 @@ router.post("/:id/check-subscription", async (req, res) => {
       const match = channelUrl.match(/t\.me\/([^/?]+)/);
       if (match) {
         channelId = `@${match[1]}`;
+      } else {
+        res.status(400).json({ error: "Invalid channel URL" });
+        return;
       }
     }
   }
+  if (!channelId && !process.env.CHANNEL_ID) {
+    res.status(400).json({ error: "Channel is not configured" });
+    return;
+  }
 
-  const result = await checkSubscription(visitor.telegramId, channelId);
+  const [result, avatarUrl] = await Promise.all([
+    checkSubscription(visitor.telegramId, channelId),
+    getTelegramAvatarUrl(visitor.telegramId),
+  ]);
   const playerName = visitor.username ? `@${visitor.username}` : visitor.firstName;
 
   try {
@@ -349,6 +404,7 @@ router.post("/:id/check-subscription", async (req, res) => {
       .to(adminRoom(id))
       .emit("admin:subscription", {
         playerName,
+        avatarUrl,
         status: result.subscribed ? "success" : "failed",
         timestamp: new Date(),
       });

@@ -53,6 +53,7 @@ export const emitAnswerEvents = (params: {
   score: number;
   visitorId: string;
   playerName: string;
+  avatarUrl?: string | null;
 }) => {
   const io = getIO();
   const timestamp = new Date();
@@ -60,6 +61,7 @@ export const emitAnswerEvents = (params: {
 
   queuePlayerAnswered(params.quizId, {
     playerName: params.playerName,
+    avatarUrl: params.avatarUrl ?? null,
     action,
     questionIndex: params.questionIndex,
     timestamp,
@@ -68,6 +70,7 @@ export const emitAnswerEvents = (params: {
   markStatsDirty(params.quizId, params.questionIndex);
   io.to(adminRoom(params.quizId)).emit("admin:answer", {
     playerName: params.playerName,
+    avatarUrl: params.avatarUrl ?? null,
     questionIndex: params.questionIndex,
     answerIndex: params.answerIndex,
     isCorrect: params.isCorrect,

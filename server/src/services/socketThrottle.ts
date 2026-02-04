@@ -4,6 +4,7 @@ import { getStats } from "./statsCache";
 
 type PlayerAnsweredEvent = {
   playerName: string;
+  avatarUrl?: string | null;
   action: "correct" | "wrong";
   questionIndex: number;
   timestamp: Date;

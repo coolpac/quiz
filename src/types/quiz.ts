@@ -30,6 +30,7 @@ export type LeaderboardPlayer = {
 
 export type LiveFeedItem = {
   playerName: string;
+  avatarUrl?: string | null;
   action: "correct" | "wrong";
   questionIndex: number;
   timestamp: Date;
@@ -37,12 +38,14 @@ export type LiveFeedItem = {
 
 export type SubscriptionLogItem = {
   playerName: string;
+  avatarUrl?: string | null;
   status: "success" | "failed";
   timestamp: Date;
 };
 
 export type AdminAnswerItem = {
   playerName: string;
+  avatarUrl?: string | null;
   questionIndex: number;
   answerIndex: number;
   isCorrect: boolean;

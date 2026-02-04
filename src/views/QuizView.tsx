@@ -54,6 +54,7 @@ const QuizView = ({ quizId, onFinish, openedFromStartParam }: QuizViewProps) => 
   const isActiveRef = useRef(true);
   const lastSocketToastRef = useRef<string | null>(null);
   const autoSkipTimerRef = useRef<number | null>(null);
+  const answerTimeoutRef = useRef<number | null>(null);
   const completingRef = useRef(false);
   const { pushToast } = useToast();
 
@@ -61,6 +62,10 @@ const QuizView = ({ quizId, onFinish, openedFromStartParam }: QuizViewProps) => 
     isActiveRef.current = true;
     return () => {
       isActiveRef.current = false;
+      if (answerTimeoutRef.current) {
+        window.clearTimeout(answerTimeoutRef.current);
+        answerTimeoutRef.current = null;
+      }
     };
   }, []);
 
@@ -217,6 +222,7 @@ const QuizView = ({ quizId, onFinish, openedFromStartParam }: QuizViewProps) => 
 
     const handlePlayerAnswered = (payload: {
       playerName: string;
+      avatarUrl?: string | null;
       action: "correct" | "wrong";
       questionIndex: number;
       timestamp: string | Date;
@@ -224,6 +230,7 @@ const QuizView = ({ quizId, onFinish, openedFromStartParam }: QuizViewProps) => 
       setLiveFeed((prev) => {
         const nextItem: LiveFeedItem = {
           playerName: payload.playerName,
+          avatarUrl: payload.avatarUrl ?? null,
           action: payload.action,
           questionIndex: payload.questionIndex,
           timestamp: new Date(payload.timestamp),
@@ -235,6 +242,7 @@ const QuizView = ({ quizId, onFinish, openedFromStartParam }: QuizViewProps) => 
     const handlePlayerAnsweredBatch = (
       payload: Array<{
         playerName: string;
+        avatarUrl?: string | null;
         action: "correct" | "wrong";
         questionIndex: number;
         timestamp: string | Date;
@@ -246,6 +254,7 @@ const QuizView = ({ quizId, onFinish, openedFromStartParam }: QuizViewProps) => 
       setLiveFeed((prev) => {
         const items = payload.map((entry) => ({
           playerName: entry.playerName,
+          avatarUrl: entry.avatarUrl ?? null,
           action: entry.action,
           questionIndex: entry.questionIndex,
           timestamp: new Date(entry.timestamp),
@@ -314,6 +323,10 @@ const QuizView = ({ quizId, onFinish, openedFromStartParam }: QuizViewProps) => 
   useEffect(() => {
     if (!quiz) {
       return;
+    }
+    if (answerTimeoutRef.current) {
+      window.clearTimeout(answerTimeoutRef.current);
+      answerTimeoutRef.current = null;
     }
     setTimeLeft(quiz.timePerQuestion);
     setSelected(null);
@@ -480,7 +493,13 @@ const QuizView = ({ quizId, onFinish, openedFromStartParam }: QuizViewProps) => 
           setRankInfo(null);
         });
 
-      setTimeout(async () => {
+      if (answerTimeoutRef.current) {
+        window.clearTimeout(answerTimeoutRef.current);
+      }
+      answerTimeoutRef.current = window.setTimeout(async () => {
+        if (!isActiveRef.current) {
+          return;
+        }
         if (currentQ < quiz.questions.length - 1) {
           setCurrentQ((q) => q + 1);
           setSelected(null);
@@ -803,7 +822,17 @@ const QuizView = ({ quizId, onFinish, openedFromStartParam }: QuizViewProps) => 
                     key={`${item.playerName}-${item.timestamp}-${i}`}
                     className="flex items-start gap-3 p-3 rounded-xl bg-black/5 dark:bg-white/5 border border-transparent"
                   >
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-purple-500 shrink-0" />
+                    {item.avatarUrl ? (
+                      <img
+                        src={item.avatarUrl}
+                        alt={item.playerName}
+                        className="w-8 h-8 rounded-full object-cover shrink-0"
+                        loading="lazy"
+                        decoding="async"
+                      />
+                    ) : (
+                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-purple-500 shrink-0" />
+                    )}
                     <div className="text-sm">
                       <span className="font-bold block text-foreground">
                         {item.playerName}

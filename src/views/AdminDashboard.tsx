@@ -230,6 +230,7 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
 
     const handleAdminAnswer = (payload: {
       playerName: string;
+      avatarUrl?: string | null;
       questionIndex: number;
       answerIndex: number;
       isCorrect: boolean;
@@ -240,6 +241,7 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
       setAdminAnswers((prev) => {
         const nextItem: AdminAnswerItem = {
           playerName: payload.playerName,
+          avatarUrl: payload.avatarUrl ?? null,
           questionIndex: payload.questionIndex,
           answerIndex: payload.answerIndex,
           isCorrect: payload.isCorrect,
@@ -263,12 +265,14 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
 
     const handleSubscription = (payload: {
       playerName: string;
+      avatarUrl?: string | null;
       status: "success" | "failed";
       timestamp: string | Date;
     }) => {
       setSubLog((prev) => {
         const nextItem: SubscriptionLogItem = {
           playerName: payload.playerName,
+          avatarUrl: payload.avatarUrl ?? null,
           status: payload.status,
           timestamp: new Date(payload.timestamp),
         };
@@ -962,6 +966,17 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
                               className="flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/5"
                             >
                               <div className="flex items-center gap-4">
+                                {item.avatarUrl ? (
+                                  <img
+                                    src={item.avatarUrl}
+                                    alt={item.playerName}
+                                    className="w-10 h-10 rounded-full object-cover"
+                                    loading="lazy"
+                                    decoding="async"
+                                  />
+                                ) : (
+                                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-purple-500" />
+                                )}
                                 <div
                                   className={cn(
                                     "w-10 h-10 rounded-xl flex items-center justify-center font-black text-xs",
@@ -1021,9 +1036,19 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
                             className="flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/5"
                           >
                             <div className="flex items-center gap-4">
-                              <div className="w-10 h-10 rounded-xl bg-[#229ED9]/10 flex items-center justify-center text-[#229ED9]">
-                                <Users size={18} />
-                              </div>
+                              {log.avatarUrl ? (
+                                <img
+                                  src={log.avatarUrl}
+                                  alt={log.playerName}
+                                  className="w-10 h-10 rounded-full object-cover"
+                                  loading="lazy"
+                                  decoding="async"
+                                />
+                              ) : (
+                                <div className="w-10 h-10 rounded-xl bg-[#229ED9]/10 flex items-center justify-center text-[#229ED9]">
+                                  <Users size={18} />
+                                </div>
+                              )}
                               <div>
                                 <div className="font-bold text-sm">{log.playerName}</div>
                                 <div
