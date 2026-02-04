@@ -1,0 +1,91 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Quiz {
+  id              String       @id @default(cuid())
+  title           String
+  category        String
+  difficulty      String       @default("medium")
+  timePerQuestion Int          @default(15)
+  isPublic        Boolean      @default(true)
+  channelUrl      String?
+  adminToken      String       @default(cuid())
+  creatorId       String?
+  creator         Visitor?     @relation(fields: [creatorId], references: [id])
+  createdAt       DateTime     @default(now())
+  expiresAt       DateTime
+  isActive        Boolean      @default(true)
+  questions       Question[]
+  attempts        QuizAttempt[]
+  answers         Answer[]
+
+  @@index([creatorId])
+}
+
+model Question {
+  id                   String   @id @default(cuid())
+  quizId               String
+  quiz                 Quiz     @relation(fields: [quizId], references: [id])
+  text                 String
+  options              Json
+  correctIndex         Int
+  mediaUrl             String?
+  mediaType            String?
+  requiresSubscription Boolean  @default(false)
+  order                Int
+  answers              Answer[]
+
+  @@index([quizId, order])
+}
+
+model Answer {
+  id          String   @id @default(cuid())
+  visitorId   String
+  visitor     Visitor  @relation(fields: [visitorId], references: [id])
+  questionId  String
+  question    Question @relation(fields: [questionId], references: [id])
+  quizId      String
+  quiz        Quiz     @relation(fields: [quizId], references: [id])
+  answerIndex Int
+  isCorrect   Boolean
+  timeLeft    Int
+  score       Int
+  answeredAt  DateTime @default(now())
+
+  @@unique([visitorId, questionId])
+  @@index([quizId, questionId])
+  @@index([questionId, answerIndex])
+}
+
+model QuizAttempt {
+  id             String   @id @default(cuid())
+  visitorId      String
+  visitor        Visitor  @relation(fields: [visitorId], references: [id])
+  quizId         String
+  quiz           Quiz     @relation(fields: [quizId], references: [id])
+  totalScore     Int
+  correctCount   Int
+  totalQuestions Int
+  isFirstAttempt Boolean  @default(true)
+  completedAt    DateTime @default(now())
+
+  @@unique([visitorId, quizId, isFirstAttempt])
+  @@index([quizId, isFirstAttempt, totalScore])
+  @@index([visitorId, quizId])
+}
+
+model Visitor {
+  id         String        @id @default(cuid())
+  telegramId BigInt        @unique
+  firstName  String
+  username   String?
+  answers    Answer[]
+  attempts   QuizAttempt[]
+  createdQuizzes Quiz[]
+}

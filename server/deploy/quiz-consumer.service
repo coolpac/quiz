@@ -1,0 +1,15 @@
+[Unit]
+Description=Quiz Answers Consumer
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/quiz/server
+Environment=NODE_ENV=production
+EnvironmentFile=/opt/quiz/server/.env
+ExecStart=/usr/bin/npm run consume:answers
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

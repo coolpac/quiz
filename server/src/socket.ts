@@ -1,0 +1,66 @@
+import { Server as HttpServer } from "http";
+import { Server } from "socket.io";
+import { prisma } from "./lib/prisma";
+import { ensureQuizExpiry } from "./services/quizLifecycle";
+import { markPlayersCountDirty } from "./services/socketThrottle";
+import { adminRoom, quizRoom, setIO } from "./socketState";
+
+export const initSocket = (server: HttpServer) => {
+  const io = new Server(server, {
+    cors: {
+      origin: process.env.APP_URL || "*",
+    },
+    pingInterval: 25000,
+    pingTimeout: 20000,
+    transports: ["websocket"],
+    perMessageDeflate: false,
+    maxHttpBufferSize: 1e5,
+  });
+  setIO(io);
+
+  io.on("connection", (socket) => {
+    socket.on("quiz:join", ({ quizId }: { quizId: string }) => {
+      if (!quizId) {
+        return;
+      }
+      socket.join(quizRoom(quizId));
+      markPlayersCountDirty(quizId);
+      void ensureQuizExpiry(quizId);
+    });
+
+    socket.on(
+      "admin:join",
+      async ({ quizId, adminToken }: { quizId: string; adminToken?: string }) => {
+        if (!quizId || !adminToken) {
+          socket.emit("admin:error", { error: "Unauthorized" });
+          return;
+        }
+        try {
+          const quiz = await prisma.quiz.findUnique({
+            where: { id: quizId },
+            select: { adminToken: true },
+          });
+          if (!quiz || quiz.adminToken !== adminToken) {
+            socket.emit("admin:error", { error: "Unauthorized" });
+            return;
+          }
+          socket.join(adminRoom(quizId));
+        } catch {
+          socket.emit("admin:error", { error: "Unauthorized" });
+        }
+      },
+    );
+
+    socket.on("disconnecting", () => {
+      for (const room of socket.rooms) {
+        if (!room.startsWith("quiz:")) {
+          continue;
+        }
+        const quizId = room.split(":")[1];
+        markPlayersCountDirty(quizId);
+      }
+    });
+  });
+
+  return io;
+};
