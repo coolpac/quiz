@@ -76,6 +76,12 @@ Build + run:
 docker compose -f docker-compose.prod.yml up -d --build
 ```
 
+### HTTPS (nginx + certbot on host)
+This expects the web container on port 8080.
+```
+DOMAIN=annaivaschenko.ru EMAIL=admin@annaivaschenko.ru bash deploy/ssl.sh
+```
+
 ### Server bootstrap + update scripts
 Bootstrap Docker on server:
 ```
