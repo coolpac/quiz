@@ -121,7 +121,6 @@ export const initWebPerf = () => {
       inpObserver.observe({
         type: "event",
         buffered: true,
-        durationThreshold: 40,
       });
     } catch {
       inpObserver = null;

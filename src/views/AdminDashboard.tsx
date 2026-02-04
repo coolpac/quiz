@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Activity,
@@ -690,7 +690,7 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
                       Нет данных
                     </div>
                   )}
-                  {myQuizzes.map((quiz, i) => (
+                  {myQuizzes.map((quiz) => (
                     <motion.div
                       key={quiz.id}
                       whileHover={{ y: -5 }}
