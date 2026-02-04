@@ -1,0 +1,10 @@
+.git
+.cursor
+.DS_Store
+node_modules
+dist
+deploy/pgdata
+deploy/redis
+.env
+server/.env
+*.log
