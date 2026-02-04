@@ -8,5 +8,5 @@ export const apiLimiter = rateLimit({
 export const answerLimiter = rateLimit({
   windowMs: 1_000,
   max: 1,
-  keyGenerator: (req) => req.visitor?.id ?? req.ip,
+  keyGenerator: (req) => req.visitor?.id ?? req.ip ?? "unknown",
 });

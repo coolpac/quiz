@@ -38,6 +38,13 @@ const router = Router();
 
 router.use(validateTelegramInitData);
 
+const getRouteId = (value: string | string[] | undefined) => {
+  if (Array.isArray(value)) {
+    return value[0];
+  }
+  return value ?? null;
+};
+
 router.post("/", adminOnly, async (req, res) => {
   try {
     const visitor = req.visitor;
@@ -101,8 +108,13 @@ router.get("/my", adminOnly, async (req, res) => {
 });
 
 router.get("/:id", async (req, res) => {
-  const { id } = req.params;
+  const id = getRouteId(req.params.id);
   const visitor = req.visitor;
+
+  if (!id) {
+    res.status(400).json({ error: "Quiz id is required" });
+    return;
+  }
 
   if (!visitor) {
     res.status(401).json({ error: "Unauthorized" });
@@ -158,8 +170,13 @@ router.get("/:id", async (req, res) => {
 });
 
 router.post("/:id/answer", answerLimiter, async (req, res) => {
-  const { id } = req.params;
+  const id = getRouteId(req.params.id);
   const visitor = req.visitor;
+
+  if (!id) {
+    res.status(400).json({ error: "Quiz id is required" });
+    return;
+  }
 
   if (!visitor) {
     res.status(401).json({ error: "Unauthorized" });
@@ -210,10 +227,8 @@ router.post("/:id/answer", answerLimiter, async (req, res) => {
     res.status(404).json({ error: "Question not found" });
     return;
   }
-  if (
-    parsedAnswerIndex < 0 ||
-    parsedAnswerIndex >= (question.options?.length ?? 0)
-  ) {
+  const options = Array.isArray(question.options) ? question.options : [];
+  if (parsedAnswerIndex < 0 || parsedAnswerIndex >= options.length) {
     res.status(400).json({ error: "Invalid answer index" });
     return;
   }
@@ -274,8 +289,13 @@ router.post("/:id/answer", answerLimiter, async (req, res) => {
 });
 
 router.post("/:id/complete", async (req, res) => {
-  const { id } = req.params;
+  const id = getRouteId(req.params.id);
   const visitor = req.visitor;
+
+  if (!id) {
+    res.status(400).json({ error: "Quiz id is required" });
+    return;
+  }
 
   if (!visitor) {
     res.status(401).json({ error: "Unauthorized" });
@@ -343,8 +363,13 @@ router.post("/:id/complete", async (req, res) => {
 });
 
 router.get("/:id/leaderboard", async (req, res) => {
-  const { id } = req.params;
+  const id = getRouteId(req.params.id);
   const visitor = req.visitor;
+
+  if (!id) {
+    res.status(400).json({ error: "Quiz id is required" });
+    return;
+  }
 
   if (!visitor) {
     res.status(401).json({ error: "Unauthorized" });
@@ -356,8 +381,13 @@ router.get("/:id/leaderboard", async (req, res) => {
 });
 
 router.post("/:id/check-subscription", async (req, res) => {
-  const { id } = req.params;
+  const id = getRouteId(req.params.id);
   const visitor = req.visitor;
+
+  if (!id) {
+    res.status(400).json({ error: "Quiz id is required" });
+    return;
+  }
 
   if (!visitor) {
     res.status(401).json({ error: "Unauthorized" });
@@ -416,7 +446,11 @@ router.post("/:id/check-subscription", async (req, res) => {
 });
 
 router.get("/:id/stats", async (req, res) => {
-  const { id } = req.params;
+  const id = getRouteId(req.params.id);
+  if (!id) {
+    res.status(400).json({ error: "Quiz id is required" });
+    return;
+  }
   const stats = await getQuizStats(id);
   res.json({ questions: stats });
 });
