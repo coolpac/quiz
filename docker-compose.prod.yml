@@ -4,57 +4,104 @@ services:
     environment:
       POSTGRES_DB: ${DB_NAME:-quiz}
       POSTGRES_USER: ${DB_USER:-quiz}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-quiz}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
     volumes:
-      - ./deploy/pgdata:/var/lib/postgresql/data
+      - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U quiz"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-quiz} -d ${DB_NAME:-quiz}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
 
   redis:
     image: redis:7-alpine
-    command: ["redis-server", "--appendonly", "yes"]
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "128mb", "--maxmemory-policy", "allkeys-lru"]
     volumes:
-      - ./deploy/redis:/data
+      - redisdata:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 192M
+
+  api:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    image: quiz-server:latest
+    env_file: ./server/.env
+    environment:
+      DATABASE_URL: postgresql://${DB_USER:-quiz}:${DB_PASSWORD}@db:5432/${DB_NAME:-quiz}
+      REDIS_URL: redis://redis:6379
+      NODE_ENV: production
+      PORT: "3001"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3001/api/health/ping || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
-
-  api:
-    build: ./server
-    env_file: ./server/.env
-    environment:
-      DATABASE_URL: postgresql://${DB_USER:-quiz}:${DB_PASSWORD:-quiz}@db:5432/${DB_NAME:-quiz}
-      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    restart: always
+      start_period: 30s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
 
   consumer:
-    build: ./server
+    image: quiz-server:latest
     command: ["node", "dist/consumer.js"]
     env_file: ./server/.env
     environment:
-      DATABASE_URL: postgresql://${DB_USER:-quiz}:${DB_PASSWORD:-quiz}@db:5432/${DB_NAME:-quiz}
-      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      DATABASE_URL: postgresql://${DB_USER:-quiz}:${DB_PASSWORD}@db:5432/${DB_NAME:-quiz}
+      REDIS_URL: redis://redis:6379
+      NODE_ENV: production
     depends_on:
-      db:
+      api:
         condition: service_healthy
-      redis:
-        condition: service_healthy
-    restart: always
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
 
   web:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
     depends_on:
-      - api
+      api:
+        condition: service_healthy
     ports:
-      - "8080:80"
-    restart: always
+      - "${WEB_PORT:-8080}:80"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:80/ || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+
+volumes:
+  pgdata:
+  redisdata:

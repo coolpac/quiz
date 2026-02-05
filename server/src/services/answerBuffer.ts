@@ -1,4 +1,3 @@
-import type { Prisma } from "@prisma/client";
 import {
   addAnswerToStream,
   deleteStreamEntries,
@@ -12,9 +11,8 @@ import {
   removeEmptyStream,
   streamKeyForQuiz,
   writeAnswers,
+  type BufferedAnswer,
 } from "./answerStream";
-
-type BufferedAnswer = Prisma.AnswerCreateManyInput;
 
 const buffer: BufferedAnswer[] = [];
 const bufferKeys = new Set<string>();
@@ -24,11 +22,11 @@ let flushPromise: Promise<void> | null = null;
 const DEDUPE_PREFIX = process.env.ANSWER_DEDUPE_PREFIX ?? "quiz:answer:dedupe:";
 const DEDUPE_TTL_SECONDS = Number(process.env.ANSWER_DEDUPE_TTL_SECONDS ?? 21600);
 
-const keyFor = (visitorId: string, questionId: string) =>
-  `${visitorId}:${questionId}`;
+const keyFor = (attemptId: string, questionId: string) =>
+  `${attemptId}:${questionId}`;
 
-const dedupeKeyFor = (visitorId: string, questionId: string) =>
-  `${DEDUPE_PREFIX}${visitorId}:${questionId}`;
+const dedupeKeyFor = (attemptId: string, questionId: string) =>
+  `${DEDUPE_PREFIX}${attemptId}:${questionId}`;
 
 const flushBuffer = async () => {
   if (flushing || buffer.length === 0) {
@@ -37,7 +35,7 @@ const flushBuffer = async () => {
 
   flushing = true;
   const batch = buffer.splice(0, buffer.length);
-  const batchKeys = batch.map((item) => keyFor(item.visitorId, item.questionId));
+  const batchKeys = batch.map((item) => keyFor(item.attemptId, item.questionId));
 
   const promise = writeAnswers(batch)
     .then(() => {
@@ -58,11 +56,11 @@ const flushBuffer = async () => {
   return promise;
 };
 
-export const hasBufferedAnswer = (visitorId: string, questionId: string) =>
-  bufferKeys.has(keyFor(visitorId, questionId));
+export const hasBufferedAnswer = (attemptId: string, questionId: string) =>
+  bufferKeys.has(keyFor(attemptId, questionId));
 
 export const enqueueAnswer = async (data: BufferedAnswer) => {
-  const key = keyFor(data.visitorId, data.questionId);
+  const key = keyFor(data.attemptId, data.questionId);
   if (bufferKeys.has(key)) {
     return false;
   }
@@ -73,7 +71,7 @@ export const enqueueAnswer = async (data: BufferedAnswer) => {
       if (!redis) {
         throw new Error("Redis not available");
       }
-      const dedupeKey = dedupeKeyFor(data.visitorId, data.questionId);
+      const dedupeKey = dedupeKeyFor(data.attemptId, data.questionId);
       const dedupe = await redis.set(dedupeKey, "1", {
         NX: true,
         EX: DEDUPE_TTL_SECONDS,
@@ -105,7 +103,7 @@ const drainStream = async (streamKey: string) => {
       entries.map((entry) => entry.id),
     );
     answers.forEach((answer) => {
-      bufferKeys.delete(keyFor(answer.visitorId, answer.questionId));
+      bufferKeys.delete(keyFor(answer.attemptId, answer.questionId));
     });
     entries = await readStreamBatch(streamKey, 500);
   }

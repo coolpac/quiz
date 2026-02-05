@@ -104,6 +104,60 @@
   @apply bg-white/80 dark:bg-gray-900/40 backdrop-blur-md border border-black/5 dark:border-white/10 shadow-lg hover:bg-white/90 dark:hover:bg-gray-800/50 transition-all duration-300;
 }
 
+.fx-scroll {
+  -webkit-overflow-scrolling: touch;
+}
+
+.fx-backdrop {
+  --tw-backdrop-blur: blur(16px);
+}
+
+.fx-blob {
+  filter: blur(120px);
+}
+
+@media (max-resolution: 1.5dppx) {
+  .fx-backdrop {
+    --tw-backdrop-blur: blur(8px);
+  }
+  .fx-blob {
+    filter: none;
+    opacity: 0.1;
+  }
+}
+
+@media (max-width: 640px) {
+  .fx-backdrop {
+    --tw-backdrop-blur: blur(10px);
+  }
+  .fx-blob {
+    filter: none;
+    opacity: 0.12;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fx-backdrop {
+    --tw-backdrop-blur: blur(8px);
+  }
+  .fx-blob {
+    filter: none;
+    opacity: 0.08;
+    animation: none !important;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .fx-backdrop {
+    --tw-backdrop-blur: blur(0px);
+    backdrop-filter: none;
+  }
+  .fx-blob {
+    filter: none;
+    opacity: 0;
+  }
+}
+
 @layer utilities {
   html:not(.dark) .admin-shell .bg-white\/5 {
     @apply bg-black/5;

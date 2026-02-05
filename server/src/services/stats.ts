@@ -32,7 +32,13 @@ export const primeQuizStatsCache = async (
   );
   const grouped = await prisma.answer.groupBy({
     by: ["questionId", "answerIndex"],
-    where: { quizId },
+    where: {
+      quizId,
+      OR: [
+        { attempt: { isFirstAttempt: { equals: true } } },
+        { attemptId: { equals: null } },
+      ],
+    },
     _count: { answerIndex: true },
   });
 
@@ -41,7 +47,11 @@ export const primeQuizStatsCache = async (
     if (order === undefined) {
       return;
     }
-    recordAnswer(quizId, order, entry.answerIndex, entry._count.answerIndex);
+    const count =
+      typeof entry._count === "object" && entry._count !== null
+        ? entry._count.answerIndex ?? 0
+        : 0;
+    recordAnswer(quizId, order, entry.answerIndex, count);
   });
 };
 

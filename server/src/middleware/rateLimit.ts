@@ -1,4 +1,4 @@
-import rateLimit from "express-rate-limit";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 
 export const apiLimiter = rateLimit({
   windowMs: 60_000,
@@ -8,5 +8,12 @@ export const apiLimiter = rateLimit({
 export const answerLimiter = rateLimit({
   windowMs: 1_000,
   max: 1,
-  keyGenerator: (req) => req.visitor?.id ?? req.ip ?? "unknown",
+  keyGenerator: (req) => {
+    if (req.visitor?.id) {
+      return req.visitor.id;
+    }
+    const ip =
+      req.ip ?? req.connection?.remoteAddress ?? req.socket?.remoteAddress ?? "";
+    return ipKeyGenerator(ip || "unknown");
+  },
 });

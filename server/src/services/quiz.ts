@@ -36,21 +36,42 @@ const validateQuizInput = (input: CreateQuizInput) => {
   if (!input.questions.length || input.questions.length > 50) {
     throw new ValidationError("Количество вопросов должно быть от 1 до 50");
   }
+  const hasSubscriptionQuestions = input.questions.some(
+    (q) => q.requiresSubscription,
+  );
+  if (hasSubscriptionQuestions) {
+    const channelUrl = input.channelUrl?.trim();
+    const hasChannelId = Boolean(process.env.CHANNEL_ID);
+    if (!channelUrl && !hasChannelId) {
+      throw new ValidationError(
+        "Для вопросов с подпиской укажите ссылку на канал или настройте CHANNEL_ID на сервере",
+      );
+    }
+    if (channelUrl) {
+      const isValidFormat =
+        channelUrl.startsWith("https://t.me/") || channelUrl.startsWith("@");
+      if (!isValidFormat) {
+        throw new ValidationError(
+          "Ссылка на канал должна быть в формате https://t.me/... или @channelname",
+        );
+      }
+    }
+  }
   input.questions.forEach((question, index) => {
     const text = question.text.trim();
     if (text.length < 3) {
       throw new ValidationError(`Вопрос ${index + 1} пуст`);
     }
-    const options = question.options.map((option) => option.trim());
-    if (options.length < 2 || options.length > 4) {
+    const trimmedOptions = question.options.map((option) => option.trim());
+    const options = trimmedOptions.filter((option) => option.length > 0);
+    const isSubscriptionGate =
+      question.requiresSubscription && options.length === 0;
+    if (!isSubscriptionGate && (options.length < 2 || options.length > 4)) {
       throw new ValidationError(
         `Вопрос ${index + 1}: нужно от 2 до 4 вариантов`,
       );
     }
-    if (options.some((option) => option.length === 0)) {
-      throw new ValidationError(`Вопрос ${index + 1}: варианты не должны быть пустыми`);
-    }
-    if (question.correctIndex < 0 || question.correctIndex >= options.length) {
+    if (!isSubscriptionGate && (question.correctIndex < 0 || question.correctIndex >= options.length)) {
       throw new ValidationError(`Вопрос ${index + 1}: неверный правильный ответ`);
     }
   });
@@ -70,15 +91,21 @@ export const createQuiz = async (input: CreateQuizInput) => {
       channelUrl: input.channelUrl ?? null,
       expiresAt,
       questions: {
-        create: input.questions.map((question) => ({
-          text: question.text.trim(),
-          options: question.options.map((option) => option.trim()),
-          correctIndex: question.correctIndex,
-          mediaUrl: question.mediaUrl ?? null,
-          mediaType: question.mediaType ?? null,
-          requiresSubscription: question.requiresSubscription ?? false,
-          order: question.order,
-        })),
+        create: input.questions.map((question) => {
+          const options = question.options
+            .map((option) => option.trim())
+            .filter((option) => option.length > 0);
+          const correctIndex = options.length === 0 ? 0 : question.correctIndex;
+          return {
+            text: question.text.trim(),
+            options,
+            correctIndex,
+            mediaUrl: question.mediaUrl ?? null,
+            mediaType: question.mediaType ?? null,
+            requiresSubscription: question.requiresSubscription ?? false,
+            order: question.order,
+          };
+        }),
       },
     },
     include: {
@@ -87,4 +114,71 @@ export const createQuiz = async (input: CreateQuizInput) => {
   });
 
   return quiz;
+};
+
+export const updateQuiz = async (
+  quizId: string,
+  creatorId: string,
+  input: CreateQuizInput,
+) => {
+  const existing = await prisma.quiz.findUnique({
+    where: { id: quizId },
+    select: { creatorId: true },
+  });
+
+  if (!existing) {
+    throw new ValidationError("Квиз не найден");
+  }
+
+  if (existing.creatorId !== creatorId) {
+    throw new ValidationError("Нет доступа к редактированию этого квиза");
+  }
+
+  validateQuizInput(input);
+
+  await prisma.$transaction(async (tx) => {
+    await tx.question.deleteMany({
+      where: { quizId },
+    });
+
+    await tx.quiz.update({
+      where: { id: quizId },
+      data: {
+        title: input.title,
+        category: input.category,
+        difficulty: input.difficulty ?? "medium",
+        timePerQuestion: input.timePerQuestion ?? 15,
+        isPublic: input.isPublic ?? true,
+        channelUrl: input.channelUrl ?? null,
+        questions: {
+          create: input.questions.map((question) => {
+            const options = question.options
+              .map((option) => option.trim())
+              .filter((option) => option.length > 0);
+            const correctIndex = options.length === 0 ? 0 : question.correctIndex;
+            return {
+              text: question.text.trim(),
+              options,
+              correctIndex,
+              mediaUrl: question.mediaUrl ?? null,
+              mediaType: question.mediaType ?? null,
+              requiresSubscription: question.requiresSubscription ?? false,
+              order: question.order,
+            };
+          }),
+        },
+      },
+    });
+  });
+
+  const updated = await prisma.quiz.findUnique({
+    where: { id: quizId },
+    include: { questions: { orderBy: { order: "asc" } } },
+  });
+
+  if (!updated) {
+    throw new ValidationError("Не удалось обновить квиз");
+  }
+
+  return updated;
 };

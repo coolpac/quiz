@@ -14,8 +14,24 @@ if (!botToken) {
 
 export const bot = new Bot(botToken);
 
+const extractStartParam = (text?: string) => {
+  if (!text) {
+    return "";
+  }
+  const rest = text.replace(/^\/start(@\w+)?\s*/i, "").trim();
+  if (!rest) {
+    return "";
+  }
+  const startAppMatch = rest.match(/startapp=([^\s&]+)/i);
+  return startAppMatch ? startAppMatch[1] : rest;
+};
+
 bot.command("start", async (ctx) => {
-  const startParam = ctx.match?.trim();
+  // Получаем параметр из команды /start {param}
+  // Также поддерживаем формат /start startapp=...
+  const startParam =
+    (typeof ctx.match === "string" && ctx.match.trim()) ||
+    extractStartParam(ctx.message?.text);
 
   if (startParam) {
     const quiz = await prisma.quiz.findUnique({
@@ -29,12 +45,12 @@ bot.command("start", async (ctx) => {
     }
 
     const keyboard = new InlineKeyboard().webApp(
-      "Открыть квиз",
+      "🎮 Открыть квиз",
       `${appUrl}?quizId=${quiz.id}`,
     );
 
     await ctx.reply(
-      `🎮 ${quiz.title}\n📋 ${quiz.questions.length} вопросов\n⏱ ${quiz.timePerQuestion}с на ответ`,
+      `🎮 ${quiz.title}\n\n📋 ${quiz.questions.length} вопросов\n⏱ ${quiz.timePerQuestion}с на ответ\n\nНажмите кнопку ниже, чтобы начать:`,
       { reply_markup: keyboard },
     );
     return;

@@ -15,7 +15,7 @@ import {
   getQuizQuestions,
   primeQuizQuestions,
 } from "../services/questionsCache";
-import { ValidationError, createQuiz } from "../services/quiz";
+import { ValidationError, createQuiz, updateQuiz } from "../services/quiz";
 import { checkSubscription } from "../services/subscription";
 import { getTelegramAvatarUrl } from "../services/telegramAvatar";
 import {
@@ -32,7 +32,7 @@ import {
 } from "../services/stats";
 import { clearQuizCache, getStats, recordAnswer } from "../services/statsCache";
 import { markLeaderboardDirty } from "../services/socketThrottle";
-import { adminRoom, getIO } from "../socketState";
+import { adminRoom, getIO, quizRoom } from "../socketState";
 
 const router = Router();
 
@@ -60,7 +60,9 @@ router.post("/", adminOnly, async (req, res) => {
     }
 
     const quiz = await createQuiz({ ...req.body, creatorId: visitor.id });
-    const deepLink = `https://t.me/${botUsername}/quiz?startapp=${quiz.id}`;
+    // Используем формат /start {quizId} для автоматической отправки команды боту
+    // Это гарантирует, что бот получит команду /start и отправит кнопку
+    const deepLink = `https://t.me/${botUsername}?start=${quiz.id}`;
     res.json({ id: quiz.id, deepLink, adminToken: quiz.adminToken });
   } catch (error) {
     if (error instanceof ValidationError) {
@@ -101,7 +103,7 @@ router.get("/my", adminOnly, async (req, res) => {
       isExpired: quiz.expiresAt < now,
       adminToken: quiz.adminToken,
       deepLink: botUsername
-        ? `https://t.me/${botUsername}/quiz?startapp=${quiz.id}`
+        ? `https://t.me/${botUsername}?start=${quiz.id}`
         : null,
     })),
   });
@@ -162,11 +164,77 @@ router.get("/:id", async (req, res) => {
     quiz: {
       id: quiz.id,
       title: quiz.title,
+      category: quiz.category,
+      difficulty: quiz.difficulty,
       timePerQuestion: quiz.timePerQuestion,
+      isPublic: quiz.isPublic,
+      channelUrl: quiz.channelUrl,
       questions,
     },
     isFirstAttempt: !firstAttempt,
   });
+});
+
+router.post("/:id/start", async (req, res) => {
+  const id = getRouteId(req.params.id);
+  const visitor = req.visitor;
+
+  if (!id) {
+    res.status(400).json({ error: "Quiz id is required" });
+    return;
+  }
+
+  if (!visitor) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  const quiz = await prisma.quiz.findUnique({
+    where: { id },
+    select: { expiresAt: true },
+  });
+  if (!quiz) {
+    res.status(404).json({ error: "Quiz not found" });
+    return;
+  }
+  if (quiz.expiresAt < new Date()) {
+    res.status(410).json({ expired: true, message: "Квиз завершен" });
+    return;
+  }
+
+  const existingAttempt = await prisma.quizAttempt.findFirst({
+    where: {
+      quizId: id,
+      visitorId: visitor.id,
+      completedAt: { equals: null },
+    },
+    orderBy: { startedAt: "desc" },
+  });
+  if (existingAttempt) {
+    res.json({
+      attemptId: existingAttempt.id,
+      isFirstAttempt: existingAttempt.isFirstAttempt,
+    });
+    return;
+  }
+
+  const firstAttempt = await prisma.quizAttempt.findFirst({
+    where: { quizId: id, visitorId: visitor.id, isFirstAttempt: true },
+  });
+
+  const attempt = await prisma.quizAttempt.create({
+    data: {
+      visitorId: visitor.id,
+      quizId: id,
+      isFirstAttempt: !firstAttempt,
+      totalScore: 0,
+      correctCount: 0,
+      totalQuestions: 0,
+    },
+    select: { id: true, isFirstAttempt: true },
+  });
+
+  res.json({ attemptId: attempt.id, isFirstAttempt: attempt.isFirstAttempt });
 });
 
 router.post("/:id/answer", answerLimiter, async (req, res) => {
@@ -183,15 +251,22 @@ router.post("/:id/answer", answerLimiter, async (req, res) => {
     return;
   }
 
-  const { questionIndex, answerIndex, timeLeft } = req.body as {
+  const { questionIndex, answerIndex, timeLeft, attemptId } = req.body as {
     questionIndex: number;
     answerIndex: number;
     timeLeft: number;
+    attemptId?: string;
   };
 
   const parsedQuestionIndex = Number(questionIndex);
   const parsedAnswerIndex = Number(answerIndex);
   const parsedTimeLeft = Number(timeLeft);
+  const parsedAttemptId = typeof attemptId === "string" ? attemptId.trim() : "";
+
+  if (!parsedAttemptId) {
+    res.status(400).json({ error: "Attempt id is required" });
+    return;
+  }
 
   if (!Number.isInteger(parsedQuestionIndex) || parsedQuestionIndex < 0) {
     res.status(400).json({ error: "Invalid question index" });
@@ -215,6 +290,25 @@ router.post("/:id/answer", answerLimiter, async (req, res) => {
     return;
   }
 
+  const attempt = await prisma.quizAttempt.findUnique({
+    where: { id: parsedAttemptId },
+    select: {
+      id: true,
+      visitorId: true,
+      quizId: true,
+      isFirstAttempt: true,
+      completedAt: true,
+    },
+  });
+  if (!attempt || attempt.quizId !== id || attempt.visitorId !== visitor.id) {
+    res.status(404).json({ error: "Attempt not found" });
+    return;
+  }
+  if (attempt.completedAt) {
+    res.status(409).json({ error: "Attempt already completed" });
+    return;
+  }
+
   const questions = await getQuizQuestions(id);
   if (parsedQuestionIndex >= questions.length) {
     res.status(404).json({ error: "Question not found" });
@@ -233,15 +327,13 @@ router.post("/:id/answer", answerLimiter, async (req, res) => {
     return;
   }
 
-  const existing = await prisma.answer.findUnique({
+  const existing = await prisma.answer.findFirst({
     where: {
-      visitorId_questionId: {
-        visitorId: visitor.id,
-        questionId: question.id,
-      },
+      attemptId: { equals: attempt.id },
+      questionId: question.id,
     },
   });
-  if (existing || hasBufferedAnswer(visitor.id, question.id)) {
+  if (existing || hasBufferedAnswer(attempt.id, question.id)) {
     res.status(409).json({ error: "Already answered" });
     return;
   }
@@ -251,6 +343,7 @@ router.post("/:id/answer", answerLimiter, async (req, res) => {
   const score = isCorrect ? 100 + safeTimeLeft * 10 : 0;
 
   const enqueued = await enqueueAnswer({
+    attemptId: attempt.id,
     visitorId: visitor.id,
     questionId: question.id,
     quizId: id,
@@ -264,27 +357,32 @@ router.post("/:id/answer", answerLimiter, async (req, res) => {
     return;
   }
 
-  recordAnswer(id, parsedQuestionIndex, parsedAnswerIndex);
+  if (attempt.isFirstAttempt) {
+    recordAnswer(id, parsedQuestionIndex, parsedAnswerIndex);
+  }
   const stats = getStats(id, parsedQuestionIndex);
 
-  const playerName = visitor.username ? `@${visitor.username}` : visitor.firstName;
-  const avatarUrl = await getTelegramAvatarUrl(visitor.telegramId);
-  emitAnswerEvents({
-    quizId: id,
-    questionIndex: parsedQuestionIndex,
-    answerIndex: parsedAnswerIndex,
-    isCorrect,
-    score,
-    visitorId: visitor.id,
-    playerName,
-    avatarUrl,
-  });
+  if (attempt.isFirstAttempt) {
+    const playerName = visitor.username ? `@${visitor.username}` : visitor.firstName;
+    const avatarUrl = await getTelegramAvatarUrl(visitor.telegramId);
+    emitAnswerEvents({
+      quizId: id,
+      questionIndex: parsedQuestionIndex,
+      answerIndex: parsedAnswerIndex,
+      isCorrect,
+      score,
+      visitorId: visitor.id,
+      playerName,
+      avatarUrl,
+    });
+  }
 
   res.json({
     isCorrect,
     correctIndex: question.correctIndex,
     score,
     stats,
+    isFirstAttempt: attempt.isFirstAttempt,
   });
 });
 
@@ -302,63 +400,91 @@ router.post("/:id/complete", async (req, res) => {
     return;
   }
 
-  const existingAttempt = await prisma.quizAttempt.findFirst({
-    where: { quizId: id, visitorId: visitor.id },
+  const { attemptId } = req.body as { attemptId?: string };
+  const parsedAttemptId = typeof attemptId === "string" ? attemptId.trim() : "";
+  if (!parsedAttemptId) {
+    res.status(400).json({ error: "Attempt id is required" });
+    return;
+  }
+
+  const attempt = await prisma.quizAttempt.findUnique({
+    where: { id: parsedAttemptId },
+    select: {
+      id: true,
+      visitorId: true,
+      quizId: true,
+      isFirstAttempt: true,
+      completedAt: true,
+    },
   });
-  if (existingAttempt) {
-    const leaderboard = await getLeaderboardUpdate(id, visitor.id);
-    res.json({
-      isFirstAttempt: false,
-      rank: leaderboard.rank,
-      totalPlayers: leaderboard.totalPlayers,
-    });
+  if (!attempt || attempt.quizId !== id || attempt.visitorId !== visitor.id) {
+    res.status(404).json({ error: "Attempt not found" });
+    return;
+  }
+  if (attempt.completedAt) {
+    res.status(409).json({ error: "Attempt already completed" });
     return;
   }
 
   await flushQuizNow(id);
 
-  const [scoreSum, correctCount, totalQuestions] = await Promise.all([
+  const [scoreSum, correctCount, questions] = await Promise.all([
     prisma.answer.aggregate({
-      where: { quizId: id, visitorId: visitor.id },
+      where: { attemptId: { equals: attempt.id } },
       _sum: { score: true },
     }),
     prisma.answer.count({
-      where: { quizId: id, visitorId: visitor.id, isCorrect: true },
+      where: { attemptId: { equals: attempt.id }, isCorrect: true },
     }),
-    prisma.question.count({ where: { quizId: id } }),
+    prisma.question.findMany({
+      where: { quizId: id },
+      select: { options: true },
+    }),
   ]);
+  const totalQuestions = questions.filter(
+    (question) => Array.isArray(question.options) && question.options.length > 0,
+  ).length;
 
-  const isFirstAttempt = !(await prisma.quizAttempt.findFirst({
-    where: { quizId: id, visitorId: visitor.id, isFirstAttempt: true },
-  }));
-
-  const attempt = await prisma.quizAttempt.create({
+  const totalScore = scoreSum._sum?.score ?? 0;
+  const updatedAttempt = await prisma.quizAttempt.update({
+    where: { id: attempt.id },
     data: {
-      visitorId: visitor.id,
-      quizId: id,
-      totalScore: scoreSum._sum.score ?? 0,
+      totalScore,
       correctCount,
       totalQuestions,
-      isFirstAttempt,
+      completedAt: new Date(),
     },
     select: { completedAt: true },
   });
 
-  const playerName = visitor.username ? `@${visitor.username}` : visitor.firstName;
-  recordLeaderboardAttempt(id, {
-    visitorId: visitor.id,
-    name: playerName,
-    score: scoreSum._sum.score ?? 0,
-    completedAt: attempt.completedAt,
-  });
-  markLeaderboardDirty(id, visitor.id);
+  if (attempt.isFirstAttempt) {
+    const playerName = visitor.username ? `@${visitor.username}` : visitor.firstName;
+    const completedAt = updatedAttempt.completedAt ?? new Date();
+    recordLeaderboardAttempt(id, {
+      visitorId: visitor.id,
+      name: playerName,
+      score: totalScore,
+      completedAt,
+    });
+    markLeaderboardDirty(id, visitor.id);
+  }
 
-  const leaderboard = await getLeaderboardUpdate(id, visitor.id);
+  const [leaderboard, firstAttempt] = await Promise.all([
+    getLeaderboardUpdate(id, visitor.id),
+    attempt.isFirstAttempt
+      ? Promise.resolve(null)
+      : prisma.quizAttempt.findFirst({
+          where: { quizId: id, visitorId: visitor.id, isFirstAttempt: true },
+          select: { correctCount: true, totalQuestions: true },
+        }),
+  ]);
 
   res.json({
-    isFirstAttempt,
+    isFirstAttempt: attempt.isFirstAttempt,
     rank: leaderboard.rank,
     totalPlayers: leaderboard.totalPlayers,
+    previousCorrectCount: firstAttempt?.correctCount ?? null,
+    previousTotalQuestions: firstAttempt?.totalQuestions ?? null,
   });
 });
 
@@ -443,6 +569,142 @@ router.post("/:id/check-subscription", async (req, res) => {
   }
 
   res.json({ subscribed: result.subscribed });
+});
+
+router.post("/:id/reset", adminOnly, async (req, res) => {
+  const id = getRouteId(req.params.id);
+  const visitor = req.visitor;
+
+  if (!id) {
+    res.status(400).json({ error: "Quiz id is required" });
+    return;
+  }
+
+  if (!visitor) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  const quiz = await prisma.quiz.findUnique({
+    where: { id },
+    select: { creatorId: true },
+  });
+
+  if (!quiz) {
+    res.status(404).json({ error: "Quiz not found" });
+    return;
+  }
+
+  if (quiz.creatorId !== visitor.id) {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+
+  await flushQuizNow(id);
+
+  await prisma.$transaction(async (tx) => {
+    await tx.answer.deleteMany({
+      where: { quizId: id },
+    });
+    await tx.quizAttempt.deleteMany({
+      where: { quizId: id },
+    });
+  });
+
+  clearLeaderboardCache(id);
+  clearQuizCache(id);
+  clearQuizQuestions(id);
+
+  const io = getIO();
+  io.to(quizRoom(id)).emit("quiz:reset");
+
+  res.json({ success: true });
+});
+
+router.put("/:id", adminOnly, async (req, res) => {
+  const id = getRouteId(req.params.id);
+  const visitor = req.visitor;
+
+  if (!id) {
+    res.status(400).json({ error: "Quiz id is required" });
+    return;
+  }
+
+  if (!visitor) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  try {
+    const quiz = await updateQuiz(id, visitor.id, {
+      ...req.body,
+      creatorId: visitor.id,
+    });
+    res.json({ id: quiz.id, adminToken: quiz.adminToken });
+  } catch (error) {
+    if (error instanceof ValidationError) {
+      res.status(400).json({ error: error.message });
+      return;
+    }
+    res.status(500).json({ error: "Failed to update quiz" });
+  }
+});
+
+router.delete("/:id", adminOnly, async (req, res) => {
+  const id = getRouteId(req.params.id);
+  const visitor = req.visitor;
+
+  if (!id) {
+    res.status(400).json({ error: "Quiz id is required" });
+    return;
+  }
+
+  if (!visitor) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  const quiz = await prisma.quiz.findUnique({
+    where: { id },
+    select: { creatorId: true },
+  });
+
+  if (!quiz) {
+    res.status(404).json({ error: "Quiz not found" });
+    return;
+  }
+
+  if (quiz.creatorId !== visitor.id) {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+
+  await flushQuizNow(id);
+
+  await prisma.$transaction(async (tx) => {
+    await tx.answer.deleteMany({
+      where: { quizId: id },
+    });
+    await tx.quizAttempt.deleteMany({
+      where: { quizId: id },
+    });
+    await tx.question.deleteMany({
+      where: { quizId: id },
+    });
+    await tx.quiz.delete({
+      where: { id },
+    });
+  });
+
+  clearLeaderboardCache(id);
+  clearQuizCache(id);
+  clearQuizQuestions(id);
+
+  const io = getIO();
+  io.to(quizRoom(id)).emit("quiz:deleted");
+  io.in(quizRoom(id)).disconnectSockets(true);
+
+  res.json({ success: true });
 });
 
 router.get("/:id/stats", async (req, res) => {

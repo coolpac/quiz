@@ -13,6 +13,7 @@ import { closeMiniApp } from "@telegram-apps/sdk";
 import { api } from "../api";
 import { connectSocket, releaseSocket } from "../socket";
 import { Button } from "../components/ui/Button";
+import SocketStatusBadge from "../components/SocketStatusBadge";
 import { cn } from "../lib/cn";
 import { useToast, type ToastVariant } from "../components/Toast";
 import { hapticImpact, hapticNotify, hapticSelection } from "../lib/telegramUi";
@@ -43,6 +44,7 @@ const QuizView = ({ quizId, onFinish, openedFromStartParam }: QuizViewProps) => 
     rank: number;
     totalPlayers: number;
   } | null>(null);
+  const [attemptId, setAttemptId] = useState<string | null>(null);
   const [liveFeed, setLiveFeed] = useState<LiveFeedItem[]>([]);
   const [playersCount, setPlayersCount] = useState<number | null>(null);
   const [isFirstAttempt, setIsFirstAttempt] = useState(true);
@@ -102,6 +104,7 @@ const QuizView = ({ quizId, onFinish, openedFromStartParam }: QuizViewProps) => 
       setLiveFeed([]);
       setPlayersCount(null);
       setApiError(null);
+      setAttemptId(null);
       setLastFailedAnswer(null);
       setTimeLeft(data.quiz?.timePerQuestion ?? 15);
       setLoading(false);
@@ -135,6 +138,40 @@ const QuizView = ({ quizId, onFinish, openedFromStartParam }: QuizViewProps) => 
     refreshLeaderboard();
   }, [refreshLeaderboard]);
 
+  useEffect(() => {
+    if (!quiz?.id) {
+      return;
+    }
+    let cancelled = false;
+    api
+      .startAttempt(quiz.id)
+      .then((data) => {
+        if (cancelled || !isActiveRef.current) {
+          return;
+        }
+        if (typeof data?.attemptId === "string" && data.attemptId.trim()) {
+          setAttemptId(data.attemptId);
+        } else {
+          setAttemptId(null);
+        }
+        if (typeof data?.isFirstAttempt === "boolean") {
+          setIsFirstAttempt(data.isFirstAttempt);
+        }
+      })
+      .catch(() => {
+        if (cancelled || !isActiveRef.current) {
+          return;
+        }
+        setAttemptId(null);
+        setApiError("Не удалось начать попытку");
+        pushToast("Не удалось начать попытку", "error");
+      })
+      .finally(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [quiz?.id, pushToast]);
+
   const completeAndFinish = React.useCallback(
     async (finalScore: number, finalCorrectCount: number) => {
       if (!quiz) {
@@ -144,26 +181,42 @@ const QuizView = ({ quizId, onFinish, openedFromStartParam }: QuizViewProps) => 
         return;
       }
       completingRef.current = true;
-      try {
-        const completeData = await api.completeQuiz(quiz.id);
+      if (!attemptId) {
         onFinish({
           score: finalScore,
           correctCount: finalCorrectCount,
-          totalQuestions: quiz.questions.length,
+          totalQuestions: quiz.questions.filter((item) => item.options.length > 0)
+            .length,
+          isFirstAttempt,
+          quizId: quiz.id,
+        });
+        return;
+      }
+      const scoredQuestions = quiz.questions.filter(
+        (item) => item.options.length > 0,
+      );
+      try {
+        const completeData = await api.completeQuiz(quiz.id, attemptId);
+        onFinish({
+          score: finalScore,
+          correctCount: finalCorrectCount,
+          totalQuestions: scoredQuestions.length,
           isFirstAttempt: completeData.isFirstAttempt ?? isFirstAttempt,
           quizId: quiz.id,
+          previousCorrectCount: completeData.previousCorrectCount ?? undefined,
+          previousTotalQuestions: completeData.previousTotalQuestions ?? undefined,
         });
       } catch {
         onFinish({
           score: finalScore,
           correctCount: finalCorrectCount,
-          totalQuestions: quiz.questions.length,
+          totalQuestions: scoredQuestions.length,
           isFirstAttempt,
           quizId: quiz.id,
         });
       }
     },
-    [isFirstAttempt, onFinish, quiz],
+    [attemptId, isFirstAttempt, onFinish, quiz],
   );
 
   useEffect(() => {
@@ -340,6 +393,19 @@ const QuizView = ({ quizId, onFinish, openedFromStartParam }: QuizViewProps) => 
   }, [currentQ, quiz]);
 
   const question = quiz?.questions[currentQ];
+  const questionText = question?.question ?? "";
+  const questionLength = questionText.length;
+  const questionSizeClass =
+    questionLength > 220
+      ? "text-base md:text-2xl"
+      : questionLength > 140
+        ? "text-lg md:text-3xl"
+        : "text-xl md:text-4xl";
+  const questionLeadingClass =
+    questionLength > 160 ? "leading-relaxed" : "leading-snug";
+  const isSubscriptionGate = Boolean(
+    question?.requiresSubscription && question.options.length === 0,
+  );
   useEffect(() => {
     currentQRef.current = currentQ;
   }, [currentQ]);
@@ -453,12 +519,21 @@ const QuizView = ({ quizId, onFinish, openedFromStartParam }: QuizViewProps) => 
       }
     }
 
+    if (!attemptId) {
+      setApiError("Не удалось начать попытку. Попробуйте снова.");
+      setLastFailedAnswer(index);
+      pushToast("Не удалось начать попытку. Попробуйте снова.", "error");
+      hapticNotify("error");
+      return;
+    }
+
     try {
       const response = await api.submitAnswer(
         quiz.id,
         currentQ,
         index,
         timeLeft,
+        attemptId,
       );
 
       setSelected(index);
@@ -513,6 +588,45 @@ const QuizView = ({ quizId, onFinish, openedFromStartParam }: QuizViewProps) => 
       setLastFailedAnswer(index);
       pushToast("Не удалось отправить ответ. Попробуйте снова.", "error");
       hapticNotify("error");
+    }
+  };
+
+  const handleSubscriptionGate = async () => {
+    if (!quiz || !question || !isSubscriptionGate || isCheckingSub) {
+      return;
+    }
+    hapticSelection();
+    setTimedOut(false);
+    setIsCheckingSub(true);
+    setCheckingIndex(null);
+    setSubError(false);
+    setApiError(null);
+    setLastFailedAnswer(null);
+
+    try {
+      const result = await api.checkSubscription(quiz.id);
+      if (!result?.subscribed) {
+        setSubError(true);
+        setApiError("Подписка не найдена. Попробуйте снова.");
+        pushToast("Подписка не найдена. Попробуйте снова.", "warning");
+        hapticNotify("warning");
+        return;
+      }
+      hapticNotify("success");
+      setApiError(null);
+      if (currentQ < quiz.questions.length - 1) {
+        setCurrentQ((q) => q + 1);
+      } else {
+        await completeAndFinish(score, correctCount);
+      }
+    } catch {
+      setSubError(true);
+      setApiError("Не удалось проверить подписку");
+      pushToast("Не удалось проверить подписку", "error");
+      hapticNotify("error");
+    } finally {
+      setIsCheckingSub(false);
+      setCheckingIndex(null);
     }
   };
 
@@ -625,8 +739,8 @@ const QuizView = ({ quizId, onFinish, openedFromStartParam }: QuizViewProps) => 
   }
 
   return (
-    <div className="min-h-[100dvh] w-full flex items-center justify-center p-4 md:p-8 bg-background overflow-y-auto">
-      <div className="w-full max-w-5xl grid grid-cols-1 lg:grid-cols-12 gap-6 md:gap-8 items-start py-8">
+    <div className="fx-scroll h-[100dvh] w-full flex items-start justify-start p-4 md:p-8 bg-background overflow-y-auto overscroll-y-contain">
+      <div className="w-full max-w-5xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-6 md:gap-8 items-start py-8">
         <div className="lg:col-span-8 space-y-6 order-1">
           <div className="flex justify-between items-end px-2">
             <div className="space-y-1">
@@ -638,27 +752,46 @@ const QuizView = ({ quizId, onFinish, openedFromStartParam }: QuizViewProps) => 
               </div>
             </div>
             {!question.requiresSubscription && (
-              <div className="flex flex-col items-end gap-2">
-                <div
-                  className={cn(
-                    "text-2xl md:text-3xl font-black font-mono px-4 py-2 rounded-2xl border-2 transition-colors",
-                    timeLeft < 5
-                      ? "border-red-500 text-red-500 animate-pulse"
-                      : "border-primary/20 text-primary",
-                  )}
-                >
-                  {timeLeft}s
-                </div>
+              <div className="flex items-end">
+                <SocketStatusBadge />
               </div>
             )}
           </div>
 
-          <div className="relative p-6 md:p-12 rounded-[2rem] md:rounded-[2.5rem] bg-card/60 dark:bg-slate-900/70 border border-black/5 dark:border-white/10 dark:shadow-2xl backdrop-blur-lg overflow-hidden shadow-2xl">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 blur-3xl rounded-full -mr-16 -mt-16 pointer-events-none" />
+          <div className="fx-backdrop relative p-6 md:p-12 rounded-[2rem] md:rounded-[2.5rem] bg-card/60 dark:bg-slate-900/70 border border-black/5 dark:border-white/10 dark:shadow-2xl backdrop-blur-lg overflow-hidden shadow-2xl">
+            <div className="fx-blob absolute top-0 right-0 w-32 h-32 bg-primary/10 blur-3xl rounded-full -mr-16 -mt-16 pointer-events-none" />
 
-            <h2 className="text-2xl md:text-4xl font-bold leading-tight mb-8 md:mb-12 relative z-10 text-foreground dark:text-white">
-              {question.question}
-            </h2>
+            <div className="mb-6 md:mb-10 relative z-10 space-y-4">
+              {!question.requiresSubscription && (
+                <div className="flex items-center justify-between gap-4">
+                  <div className="text-[10px] md:text-xs font-bold uppercase tracking-widest opacity-40 text-foreground">
+                    Время на вопрос
+                  </div>
+                  <div
+                    className={cn(
+                      "shrink-0 w-fit text-xl md:text-3xl font-black font-mono px-4 py-2 rounded-xl md:rounded-2xl border-2 transition-colors",
+                      timeLeft < 5
+                        ? "border-red-500 text-red-500 animate-pulse"
+                        : "border-primary/20 text-primary",
+                    )}
+                  >
+                    {timeLeft}s
+                  </div>
+                </div>
+              )}
+              <div className="relative">
+                <h2
+                  className={cn(
+                    questionSizeClass,
+                    questionLeadingClass,
+                    "font-bold text-foreground dark:text-white break-words hyphens-auto text-pretty max-h-[45vh] md:max-h-none overflow-y-auto pr-2",
+                  )}
+                >
+                  {question.question}
+                </h2>
+                <div className="pointer-events-none absolute bottom-0 left-0 right-2 h-6 bg-gradient-to-t from-background/80 to-transparent md:hidden" />
+              </div>
+            </div>
 
             {timedOut && (
               <div className="mb-6 px-4 py-2 rounded-xl bg-red-500/10 text-red-500 text-sm font-bold text-center">
@@ -690,6 +823,21 @@ const QuizView = ({ quizId, onFinish, openedFromStartParam }: QuizViewProps) => 
                 >
                   Перейти в канал <ExternalLink size={18} />
                 </a>
+                {isSubscriptionGate && (
+                  <Button
+                    variant="glass"
+                    onClick={handleSubscriptionGate}
+                    disabled={isCheckingSub}
+                    className="w-full"
+                  >
+                    {isCheckingSub ? (
+                      <RotateCcw className="mr-2 w-4 h-4 animate-spin" />
+                    ) : (
+                      <ShieldCheck className="mr-2 w-4 h-4" />
+                    )}
+                    Проверить подписку и продолжить
+                  </Button>
+                )}
                 {subError && (
                   <p className="text-xs font-bold text-red-500 flex items-center gap-1">
                     <XCircle size={14} /> Вы еще не подписались! Попробуйте снова
@@ -728,70 +876,72 @@ const QuizView = ({ quizId, onFinish, openedFromStartParam }: QuizViewProps) => 
               </motion.div>
             )}
 
-            <div className="grid gap-3 md:gap-4 relative z-10">
-              {question.options.map((opt, idx) => {
-                const isSelected = selected === idx;
-                const isCorrect =
-                  showStats && correctIndex !== null && idx === correctIndex;
-                const stat = stats[idx] ?? 0;
-                const widthValue = showStats ? stat : 0;
+            {question.options.length > 0 && (
+              <div className="grid gap-3 md:gap-4 relative z-10">
+                {question.options.map((opt, idx) => {
+                  const isSelected = selected === idx;
+                  const isCorrect =
+                    showStats && correctIndex !== null && idx === correctIndex;
+                  const stat = stats[idx] ?? 0;
+                  const widthValue = showStats ? stat : 0;
 
-                return (
-                  <button
-                    key={idx}
-                    onClick={() =>
-                      selected === null && !isCheckingSub && handleAnswer(idx)
-                    }
-                    className={cn(
-                      "group relative p-4 md:p-6 rounded-xl md:rounded-2xl text-left transition-all duration-500 overflow-hidden border-2",
-                      selected === null
-                        ? "bg-black/5 dark:bg-gradient-to-r dark:from-slate-800/85 dark:to-slate-900/85 border-transparent dark:border-white/25 hover:border-primary/50 hover:bg-black/10 dark:hover:from-slate-700/90 dark:hover:to-slate-900/90 dark:hover:border-primary/70 dark:ring-1 dark:ring-white/20 dark:shadow-[0_10px_25px_rgba(0,0,0,0.6)]"
-                        : isCorrect
-                          ? "bg-green-500/20 border-green-500/50 text-green-600 dark:text-green-400"
-                          : isSelected
-                            ? "bg-red-500/20 border-red-500/50 text-red-600 dark:text-red-400"
-                            : "bg-black/5 dark:bg-slate-800/70 border-transparent dark:border-white/15 opacity-50",
-                    )}
-                  >
-                    <div
+                  return (
+                    <button
+                      key={idx}
+                      onClick={() =>
+                        selected === null && !isCheckingSub && handleAnswer(idx)
+                      }
                       className={cn(
-                        "absolute inset-y-0 left-0 opacity-10 dark:opacity-30 transition-[width] duration-500",
-                        isCorrect ? "bg-green-500" : "bg-primary",
+                        "group relative p-4 md:p-6 rounded-xl md:rounded-2xl text-left transition-all duration-500 overflow-hidden border-2",
+                        selected === null
+                          ? "bg-black/5 dark:bg-gradient-to-r dark:from-slate-800/85 dark:to-slate-900/85 border-transparent dark:border-white/25 hover:border-primary/50 hover:bg-black/10 dark:hover:from-slate-700/90 dark:hover:to-slate-900/90 dark:hover:border-primary/70 dark:ring-1 dark:ring-white/20 dark:shadow-[0_10px_25px_rgba(0,0,0,0.6)]"
+                          : isCorrect
+                            ? "bg-green-500/20 border-green-500/50 text-green-600 dark:text-green-400"
+                            : isSelected
+                              ? "bg-red-500/20 border-red-500/50 text-red-600 dark:text-red-400"
+                              : "bg-black/5 dark:bg-slate-800/70 border-transparent dark:border-white/15 opacity-50",
                       )}
-                      style={{ width: `${widthValue}%` }}
-                    />
+                    >
+                      <div
+                        className={cn(
+                          "absolute inset-y-0 left-0 opacity-10 dark:opacity-30 transition-[width] duration-500",
+                          isCorrect ? "bg-green-500" : "bg-primary",
+                        )}
+                        style={{ width: `${widthValue}%` }}
+                      />
 
-                    <div className="flex justify-between items-center relative z-10">
-                      <div className="flex items-center gap-3 md:gap-4">
-                        <span
-                          className={cn(
-                            "w-8 h-8 md:w-10 md:h-10 rounded-lg md:rounded-xl flex items-center justify-center font-black text-xs md:text-sm border-2 transition-colors",
-                            selected === null
-                              ? "border-black/10 dark:border-white/30 group-hover:border-primary/50 dark:bg-white/10"
-                              : "border-current",
-                          )}
-                        >
-                          {isCheckingSub && checkingIndex === idx ? (
-                            <RotateCcw className="animate-spin" size={16} />
-                          ) : (
-                            String.fromCharCode(65 + idx)
-                          )}
-                        </span>
-                        <span className="text-base md:text-lg font-bold text-foreground dark:text-white">
-                          {opt}
-                        </span>
+                      <div className="flex justify-between items-center relative z-10">
+                        <div className="flex items-center gap-3 md:gap-4">
+                          <span
+                            className={cn(
+                              "w-8 h-8 md:w-10 md:h-10 rounded-lg md:rounded-xl flex items-center justify-center font-black text-xs md:text-sm border-2 transition-colors",
+                              selected === null
+                                ? "border-black/10 dark:border-white/30 group-hover:border-primary/50 dark:bg-white/10"
+                                : "border-current",
+                            )}
+                          >
+                            {isCheckingSub && checkingIndex === idx ? (
+                              <RotateCcw className="animate-spin" size={16} />
+                            ) : (
+                              String.fromCharCode(65 + idx)
+                            )}
+                          </span>
+                          <span className="text-base md:text-lg font-bold text-foreground dark:text-white">
+                            {opt}
+                          </span>
+                        </div>
+
+                        {showStats && (
+                          <span className="font-black text-lg md:text-xl opacity-80 text-foreground dark:text-white">
+                            {stat}%
+                          </span>
+                        )}
                       </div>
-
-                      {showStats && (
-                        <span className="font-black text-lg md:text-xl opacity-80 text-foreground dark:text-white">
-                          {stat}%
-                        </span>
-                      )}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
 
             {apiError && lastFailedAnswer !== null && selected === null && (
               <div className="mt-6 flex items-center justify-center">

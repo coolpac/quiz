@@ -20,6 +20,9 @@ export type QuizResults = {
   totalQuestions: number;
   isFirstAttempt: boolean;
   quizId: string;
+  /** При повторном прохождении — результат первой попытки для сравнения */
+  previousCorrectCount?: number | null;
+  previousTotalQuestions?: number | null;
 };
 
 export type LeaderboardPlayer = {

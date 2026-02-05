@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Activity,
@@ -19,6 +19,8 @@ import { api } from "../api";
 import { Button } from "../components/ui/Button";
 import { useToast } from "../components/Toast";
 import { cn } from "../lib/cn";
+import { hapticNotify, hapticSelection } from "../lib/telegramUi";
+import type { QuizQuestion } from "../types/quiz";
 
 type QuestionDraft = {
   id: string;
@@ -50,9 +52,10 @@ const createEmptyQuestion = (): QuestionDraft => ({
 
 type CreateQuizViewProps = {
   onExit: () => void;
+  quizId?: string | null;
 };
 
-const CreateQuizView = ({ onExit }: CreateQuizViewProps) => {
+const CreateQuizView = ({ onExit, quizId: editQuizId }: CreateQuizViewProps) => {
   const [step, setStep] = useState(1);
   const [quizName, setQuizName] = useState("");
   const [category, setCategory] = useState("");
@@ -71,6 +74,9 @@ const CreateQuizView = ({ onExit }: CreateQuizViewProps) => {
   const [adminToken, setAdminToken] = useState<string | null>(null);
   const [createdQuizId, setCreatedQuizId] = useState<string | null>(null);
   const [isPublishing, setIsPublishing] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+  const [isUploadingMedia, setIsUploadingMedia] = useState(false);
+  const [mediaUploadError, setMediaUploadError] = useState<string | null>(null);
   const [draftPrompt, setDraftPrompt] = useState<{
     draft: {
       quizName: string;
@@ -88,6 +94,11 @@ const CreateQuizView = ({ onExit }: CreateQuizViewProps) => {
     () => questions[activeQuestionIndex] ?? createEmptyQuestion(),
     [questions, activeQuestionIndex],
   );
+
+  useEffect(() => {
+    setMediaUploadError(null);
+    setIsUploadingMedia(false);
+  }, [activeQuestionIndex]);
 
   const needsChannelUrl = useMemo(
     () => questions.some((question) => question.requiresSubscription),
@@ -129,6 +140,35 @@ const CreateQuizView = ({ onExit }: CreateQuizViewProps) => {
     return /\.(mp4|webm)(\?|#|$)/i.test(value) ? "video" : "image";
   };
 
+  const handleMediaUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+    setIsUploadingMedia(true);
+    setMediaUploadError(null);
+    try {
+      const result = await api.uploadMedia(file);
+      updateActiveQuestion((draft) => ({
+        ...draft,
+        mediaUrl: result.url,
+        mediaType: result.mediaType ?? inferMediaType(result.url),
+      }));
+      hapticNotify("success");
+    } catch (error) {
+      const message =
+        error instanceof Error && error.message
+          ? error.message
+          : "Не удалось загрузить файл";
+      setMediaUploadError(message);
+      pushToast(message, "error");
+      hapticNotify("error");
+    } finally {
+      setIsUploadingMedia(false);
+      event.target.value = "";
+    }
+  };
+
   const validationError = useMemo(() => {
     if (quizName.trim().length < 2) {
       return "Введите название квиза";
@@ -142,32 +182,40 @@ const CreateQuizView = ({ onExit }: CreateQuizViewProps) => {
         return `Вопрос ${i + 1} пуст`;
       }
       const nonEmptyOptions = question.options.filter((opt) => opt.trim());
-      if (nonEmptyOptions.length < 2) {
+      const isSubscriptionGate =
+        question.requiresSubscription && nonEmptyOptions.length === 0;
+      if (!isSubscriptionGate && nonEmptyOptions.length < 2) {
         return `Вопрос ${i + 1}: минимум 2 варианта`;
       }
       if (
-        question.correctIndex < 0 ||
-        question.correctIndex >= question.options.length ||
-        !question.options[question.correctIndex]?.trim()
+        !isSubscriptionGate &&
+        (question.correctIndex < 0 ||
+          question.correctIndex >= question.options.length ||
+          !question.options[question.correctIndex]?.trim())
       ) {
         return `Вопрос ${i + 1}: выберите правильный вариант`;
       }
     }
     if (needsChannelUrl) {
+      if (!channelUrl.trim()) {
+        return "Укажите ссылку на канал для вопросов с подпиской";
+      }
       const trimmed = channelUrl.trim();
-      if (!trimmed.startsWith("https://t.me/")) {
-        return "Укажите ссылку на канал в формате https://t.me/...";
+      if (!trimmed.startsWith("https://t.me/") && !trimmed.startsWith("@")) {
+        return "Укажите ссылку на канал в формате https://t.me/... или @channelname";
       }
     }
     return null;
   }, [category, channelUrl, needsChannelUrl, questions, quizName]);
 
   const handlePublish = async () => {
+    hapticSelection();
     if (isPublishing) {
       return;
     }
     if (validationError) {
       pushToast(validationError, "warning");
+      hapticNotify("warning");
       return;
     }
     setIsPublishing(true);
@@ -198,7 +246,21 @@ const CreateQuizView = ({ onExit }: CreateQuizViewProps) => {
         }),
       };
 
-      const response = await api.createQuiz(payload);
+      const response = editQuizId
+        ? await api.updateQuiz(editQuizId, payload)
+        : await api.createQuiz(payload);
+      if (editQuizId) {
+        pushToast("Квиз обновлен", "success");
+        try {
+          window.dispatchEvent(new Event("myQuizzesUpdated"));
+        } catch {
+          // ignore event dispatch failures
+        }
+        setTimeout(() => {
+          onExit();
+        }, 1500);
+        return;
+      }
       setQuizUrl(response.deepLink);
       setAdminToken(response.adminToken ?? null);
       setCreatedQuizId(response.id ?? null);
@@ -224,7 +286,25 @@ const CreateQuizView = ({ onExit }: CreateQuizViewProps) => {
       } catch {
         // ignore storage failures
       }
-    } catch {
+    } catch (error) {
+      const message =
+        error instanceof Error && error.message
+          ? error.message
+          : "Не удалось опубликовать квиз";
+      pushToast(message, "error");
+      if (/канал|подпис|CHANNEL_ID/i.test(message)) {
+        pushToast(
+          "Для вопросов с подпиской нужна ссылка на канал (https://t.me/...) или @channelname",
+          "warning",
+        );
+      }
+      if (/вариант|ответ/i.test(message)) {
+        pushToast(
+          "Проверьте, что у вопроса минимум 2 варианта ответа.",
+          "warning",
+        );
+      }
+      hapticNotify("error");
       setIsPublished(false);
     } finally {
       setIsPublishing(false);
@@ -232,6 +312,7 @@ const CreateQuizView = ({ onExit }: CreateQuizViewProps) => {
   };
 
   const copyToClipboard = () => {
+    hapticSelection();
     if (!quizUrl) {
       return;
     }
@@ -239,6 +320,7 @@ const CreateQuizView = ({ onExit }: CreateQuizViewProps) => {
   };
 
   const copyAdminToken = () => {
+    hapticSelection();
     if (!adminToken) {
       return;
     }
@@ -278,6 +360,65 @@ const CreateQuizView = ({ onExit }: CreateQuizViewProps) => {
   };
 
   useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 640);
+    };
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []);
+
+  useEffect(() => {
+    if (!editQuizId) {
+      return;
+    }
+    let cancelled = false;
+    api
+      .getQuiz(editQuizId)
+      .then((data) => {
+        if (cancelled || !data?.quiz) {
+          return;
+        }
+        const quiz = data.quiz;
+        setQuizName(quiz.title);
+        setCategory((quiz as { category?: string })?.category ?? "");
+        setDifficulty(
+          ((quiz as { difficulty?: string })?.difficulty ?? "medium") as
+            | "easy"
+            | "medium"
+            | "hard",
+        );
+        setTimePerQuestion(quiz.timePerQuestion ?? 15);
+        setIsPublic((quiz as { isPublic?: boolean })?.isPublic ?? true);
+        setChannelUrl((quiz as { channelUrl?: string })?.channelUrl ?? "");
+        setQuestions(
+          quiz.questions.map((q: QuizQuestion & { correctIndex?: number }) => ({
+            id: q.id ?? createQuestionId(),
+            text: q.question,
+            options: q.options.length > 0 ? q.options : [...DEFAULT_OPTIONS],
+            correctIndex: q.correctIndex ?? 0,
+            requiresSubscription: q.requiresSubscription ?? false,
+            mediaUrl: q.media?.url,
+            mediaType: q.media?.type,
+          })),
+        );
+        setActiveQuestionIndex(0);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          pushToast("Не удалось загрузить квиз для редактирования", "error");
+          onExit();
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [editQuizId, onExit, pushToast]);
+
+  useEffect(() => {
+    if (editQuizId) {
+      return;
+    }
     try {
       const raw = window.localStorage.getItem(DRAFT_KEY);
       if (!raw) {
@@ -312,10 +453,10 @@ const CreateQuizView = ({ onExit }: CreateQuizViewProps) => {
     } catch {
       // ignore draft parsing failures
     }
-  }, []);
+  }, [editQuizId]);
 
   useEffect(() => {
-    if (isPublished) {
+    if (isPublished || editQuizId) {
       return;
     }
     try {
@@ -332,49 +473,58 @@ const CreateQuizView = ({ onExit }: CreateQuizViewProps) => {
     } catch {
       // ignore draft save failures
     }
-  }, [category, channelUrl, difficulty, isPublic, isPublished, questions, quizName, timePerQuestion]);
+  }, [category, channelUrl, difficulty, isPublic, isPublished, questions, quizName, timePerQuestion, editQuizId]);
 
   return (
-    <div className="min-h-[100dvh] w-full bg-background flex flex-col relative overflow-hidden">
-      <div className="absolute top-[-10%] left-[-10%] w-[50vw] h-[50vw] bg-primary/10 rounded-full blur-[120px] pointer-events-none" />
+    <div className="min-h-[100dvh] w-full bg-background flex flex-col relative overflow-x-hidden">
+      <div className="fx-blob absolute top-[-10%] left-[-10%] w-[50vw] h-[50vw] bg-primary/10 rounded-full blur-[120px] pointer-events-none" />
 
-      <header className="h-20 border-b border-black/5 dark:border-white/10 px-6 flex items-center justify-between backdrop-blur-md bg-background/50 z-20">
-        <div className="flex items-center gap-4">
+      <header className="fx-backdrop h-16 sm:h-20 border-b border-black/5 dark:border-white/10 px-4 sm:px-6 flex items-center justify-between backdrop-blur-md bg-background/50 z-20">
+        <div className="flex items-center gap-2 sm:gap-4">
           <button
-            onClick={onExit}
+            onClick={() => {
+              hapticSelection();
+              onExit();
+            }}
             className="p-2 hover:bg-black/5 dark:hover:bg-white/5 rounded-xl transition-colors"
           >
-            <XCircle className="w-6 h-6 opacity-50" />
+            <XCircle className="w-5 h-5 sm:w-6 sm:h-6 opacity-50" />
           </button>
-          <h2 className="text-xl font-black tracking-tight">Создание квиза</h2>
+          <h2 className="text-base sm:text-xl font-black tracking-tight">
+            {editQuizId ? "Редактирование квиза" : "Создание квиза"}
+          </h2>
         </div>
         {!isPublished && (
           <div className="flex items-center gap-2">
-            <div
-              className={cn(
-                "w-2 h-2 rounded-full",
-                step >= 1 ? "bg-primary" : "bg-black/10 dark:bg-white/10",
-              )}
-            />
-            <div
-              className={cn(
-                "w-2 h-2 rounded-full",
-                step >= 2 ? "bg-primary" : "bg-black/10 dark:bg-white/10",
-              )}
-            />
-            <div
-              className={cn(
-                "w-2 h-2 rounded-full",
-                step >= 3 ? "bg-primary" : "bg-black/10 dark:bg-white/10",
-              )}
-            />
+            {[1, 2, 3].map((targetStep) => (
+              <button
+                key={targetStep}
+                type="button"
+                onClick={() => {
+                  if (targetStep > step && (!quizName || !category)) {
+                    pushToast("Сначала заполните название и категорию", "warning");
+                    hapticNotify("warning");
+                    return;
+                  }
+                  hapticSelection();
+                  setStep(targetStep);
+                }}
+                className={cn(
+                  "w-2 h-2 rounded-full transition-all",
+                  step >= targetStep
+                    ? "bg-primary"
+                    : "bg-black/10 dark:bg-white/10",
+                )}
+                aria-label={`Шаг ${targetStep}`}
+              />
+            ))}
           </div>
         )}
       </header>
 
-      <main className="flex-1 overflow-y-auto p-6 relative z-10">
+      <main className="fx-scroll flex-1 overflow-y-auto p-4 sm:p-6 pb-28 sm:pb-6 relative z-10">
         {draftPrompt && (
-          <div className="fixed top-6 right-6 z-[250] max-w-sm p-4 rounded-2xl bg-primary/10 border border-primary/30 backdrop-blur-md shadow-lg space-y-3">
+          <div className="fixed top-4 right-4 sm:top-6 sm:right-6 z-[250] max-w-sm p-4 rounded-2xl bg-primary/10 border border-primary/30 backdrop-blur-md shadow-lg space-y-3">
             <div className="text-sm font-bold text-primary">
               Восстановить черновик?
             </div>
@@ -382,13 +532,23 @@ const CreateQuizView = ({ onExit }: CreateQuizViewProps) => {
               Найден незавершенный квиз. Продолжить с сохраненной версии?
             </div>
             <div className="flex gap-2">
-              <Button size="sm" onClick={restoreDraft} className="flex-1">
+              <Button
+                size="sm"
+                onClick={() => {
+                  hapticSelection();
+                  restoreDraft();
+                }}
+                className="flex-1"
+              >
                 Восстановить
               </Button>
               <Button
                 size="sm"
                 variant="glass"
-                onClick={discardDraft}
+                onClick={() => {
+                  hapticSelection();
+                  discardDraft();
+                }}
                 className="flex-1"
               >
                 Сбросить
@@ -396,7 +556,7 @@ const CreateQuizView = ({ onExit }: CreateQuizViewProps) => {
             </div>
           </div>
         )}
-        <div className="max-w-2xl mx-auto space-y-12 py-8">
+        <div className="max-w-2xl mx-auto space-y-6 sm:space-y-12 py-4 sm:py-8">
           <AnimatePresence mode="wait">
             {isPublished ? (
               <motion.div
@@ -409,8 +569,8 @@ const CreateQuizView = ({ onExit }: CreateQuizViewProps) => {
                   <CheckCircle2 size={48} />
                 </div>
                 <div className="space-y-2">
-                  <h3 className="text-4xl font-black">Квиз опубликован!</h3>
-                  <p className="text-muted-foreground font-medium">
+                  <h3 className="text-2xl sm:text-4xl font-black">Квиз опубликован!</h3>
+                  <p className="text-sm sm:text-base text-muted-foreground font-medium">
                     Ваш квиз готов к игре. Поделитесь ссылкой с игроками.
                   </p>
                 </div>
@@ -419,18 +579,18 @@ const CreateQuizView = ({ onExit }: CreateQuizViewProps) => {
                   <div className="p-8 rounded-[2.5rem] bg-white dark:bg-white/5 border border-black/5 dark:border-white/10 shadow-2xl relative group overflow-hidden">
                     <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-purple-500/5 opacity-0 group-hover:opacity-100 transition-opacity" />
                     <div className="relative z-10 flex flex-col items-center gap-6">
-                      <div className="p-4 bg-white rounded-3xl shadow-inner shadow-black/5">
+                      <div className="p-3 sm:p-4 bg-white rounded-3xl shadow-inner shadow-black/5">
                         <QRCodeSVG
                           value={quizUrl}
-                          size={200}
+                          size={isMobile ? 150 : 200}
                           level="H"
                           includeMargin={false}
                           imageSettings={{
                             src: "https://api.dicebear.com/7.x/avataaars/svg?seed=Felix",
                             x: undefined,
                             y: undefined,
-                            height: 40,
-                            width: 40,
+                            height: isMobile ? 30 : 40,
+                            width: isMobile ? 30 : 40,
                             excavate: true,
                           }}
                         />
@@ -442,15 +602,15 @@ const CreateQuizView = ({ onExit }: CreateQuizViewProps) => {
                   </div>
 
                   <div className="flex flex-col gap-3">
-                    <div className="flex items-center gap-2 p-4 rounded-2xl bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10">
-                      <div className="flex-1 truncate font-bold text-sm opacity-60 text-left">
+                    <div className="flex items-center gap-2 p-3 sm:p-4 rounded-2xl bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10">
+                      <div className="flex-1 truncate font-bold text-xs sm:text-sm opacity-60 text-left">
                         {quizUrl}
                       </div>
                       <button
                         onClick={copyToClipboard}
-                        className="p-2 hover:bg-primary/10 hover:text-primary rounded-xl transition-all"
+                        className="p-2 hover:bg-primary/10 hover:text-primary rounded-xl transition-all flex-shrink-0"
                       >
-                        <Copy size={18} />
+                        <Copy className="w-4 h-4 sm:w-[18px] sm:h-[18px]" />
                       </button>
                     </div>
                     {adminToken && (
@@ -471,7 +631,13 @@ const CreateQuizView = ({ onExit }: CreateQuizViewProps) => {
                         Сохранено в браузере для квиза {createdQuizId}
                       </div>
                     )}
-                    <Button onClick={onExit} className="w-full py-6 text-lg">
+                    <Button
+                      onClick={() => {
+                        hapticSelection();
+                        onExit();
+                      }}
+                      className="w-full py-5 sm:py-6 text-base sm:text-lg"
+                    >
                       Вернуться в админку
                     </Button>
                   </div>
@@ -486,12 +652,12 @@ const CreateQuizView = ({ onExit }: CreateQuizViewProps) => {
                   exit={{ opacity: 0, x: -20 }}
                   className="space-y-8"
                 >
-                  <div className="space-y-2">
-                    <h3 className="text-3xl font-black">С чего начнем?</h3>
-                    <p className="text-muted-foreground font-medium">
-                      Дайте вашему квизу крутое название и выберите категорию.
-                    </p>
-                  </div>
+                <div className="space-y-2">
+                  <h3 className="text-2xl sm:text-3xl font-black">С чего начнем?</h3>
+                  <p className="text-sm sm:text-base text-muted-foreground font-medium">
+                    Дайте вашему квизу крутое название и выберите категорию.
+                  </p>
+                </div>
 
                   <div className="space-y-6">
                     <div className="space-y-3">
@@ -501,7 +667,7 @@ const CreateQuizView = ({ onExit }: CreateQuizViewProps) => {
                       <input
                         type="text"
                         placeholder="Напр: Битва Титанов JS"
-                        className="w-full p-6 rounded-[1.5rem] bg-black/5 dark:bg-white/5 border-2 border-transparent focus:border-primary/50 focus:bg-transparent transition-all outline-none text-xl font-bold"
+                        className="w-full p-4 sm:p-6 rounded-xl sm:rounded-[1.5rem] bg-black/5 dark:bg-white/5 border-2 border-transparent focus:border-primary/50 focus:bg-transparent transition-all outline-none text-lg sm:text-xl font-bold"
                         value={quizName}
                         onChange={(e) => setQuizName(e.target.value)}
                       />
@@ -518,9 +684,12 @@ const CreateQuizView = ({ onExit }: CreateQuizViewProps) => {
                             return (
                               <button
                                 key={cat}
-                                onClick={() => setCategory(cat)}
+                                onClick={() => {
+                                  hapticSelection();
+                                  setCategory(cat);
+                                }}
                                 className={cn(
-                                  "p-4 rounded-2xl bg-black/5 dark:bg-white/5 border-2 font-bold transition-all",
+                                  "p-3 sm:p-4 rounded-xl sm:rounded-2xl bg-black/5 dark:bg-white/5 border-2 font-bold text-sm sm:text-base transition-all",
                                   isActive
                                     ? "border-primary/70 text-primary"
                                     : "border-transparent hover:border-primary/30",
@@ -536,11 +705,14 @@ const CreateQuizView = ({ onExit }: CreateQuizViewProps) => {
                   </div>
 
                   <Button
-                    onClick={() => setStep(2)}
-                    className="w-full py-8 text-xl bg-gradient-to-r from-primary to-purple-600"
+                    onClick={() => {
+                      hapticSelection();
+                      setStep(2);
+                    }}
+                    className="hidden sm:flex w-full py-5 sm:py-8 text-base sm:text-xl bg-gradient-to-r from-primary to-purple-600"
                     disabled={!quizName || !category}
                   >
-                    Далее <ArrowRight className="ml-2 w-6 h-6" />
+                    Далее <ArrowRight className="ml-2 w-5 h-5 sm:w-6 sm:h-6" />
                   </Button>
                 </motion.div>
               )
@@ -555,27 +727,27 @@ const CreateQuizView = ({ onExit }: CreateQuizViewProps) => {
                 className="space-y-8"
               >
                 <div className="space-y-2">
-                  <h3 className="text-3xl font-black">Настройки игры</h3>
+                  <h3 className="text-2xl sm:text-3xl font-black">Настройки игры</h3>
                   <p className="text-muted-foreground font-medium">
                     Настройте правила для участников.
                   </p>
                 </div>
 
                 <div className="space-y-6">
-                  <div className="p-6 rounded-[2rem] bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10 space-y-6">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-4">
-                        <div className="p-3 rounded-2xl bg-primary/10 text-primary">
-                          <Timer size={24} />
+                  <div className="p-4 sm:p-6 rounded-2xl sm:rounded-[2rem] bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10 space-y-4 sm:space-y-6">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 sm:gap-4">
+                        <div className="p-2 sm:p-3 rounded-2xl bg-primary/10 text-primary">
+                          <Timer className="w-5 h-5 sm:w-6 sm:h-6" />
                         </div>
                         <div>
-                          <div className="font-bold text-lg">Время на ответ</div>
-                          <div className="text-xs text-muted-foreground font-medium uppercase tracking-widest">
+                          <div className="font-bold text-base sm:text-lg">Время на ответ</div>
+                          <div className="text-[10px] sm:text-xs text-muted-foreground font-medium uppercase tracking-widest">
                             Секунд на каждый вопрос
                           </div>
                         </div>
                       </div>
-                      <div className="text-2xl font-black text-primary">
+                      <div className="text-xl sm:text-2xl font-black text-primary whitespace-nowrap">
                         {timePerQuestion}s
                       </div>
                     </div>
@@ -600,10 +772,10 @@ const CreateQuizView = ({ onExit }: CreateQuizViewProps) => {
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="p-6 rounded-[2rem] bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10 space-y-4">
-                      <div className="flex items-center gap-3">
-                        <Activity size={20} className="text-orange-500" />
-                        <span className="font-bold">Сложность</span>
+                    <div className="p-4 sm:p-6 rounded-2xl sm:rounded-[2rem] bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10 space-y-4">
+                      <div className="flex items-center gap-2 sm:gap-3">
+                        <Activity className="w-4 h-4 sm:w-5 sm:h-5 text-orange-500" />
+                        <span className="font-bold text-sm sm:text-base">Сложность</span>
                       </div>
                       <div className="flex gap-2">
                         {[
@@ -629,10 +801,10 @@ const CreateQuizView = ({ onExit }: CreateQuizViewProps) => {
                       </div>
                     </div>
 
-                    <div className="p-6 rounded-[2rem] bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10 space-y-4">
-                      <div className="flex items-center gap-3">
-                        <Eye size={20} className="text-blue-500" />
-                        <span className="font-bold">Приватность</span>
+                    <div className="p-4 sm:p-6 rounded-2xl sm:rounded-[2rem] bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10 space-y-4">
+                      <div className="flex items-center gap-2 sm:gap-3">
+                        <Eye className="w-4 h-4 sm:w-5 sm:h-5 text-blue-500" />
+                        <span className="font-bold text-sm sm:text-base">Приватность</span>
                       </div>
                       <div className="flex items-center justify-between bg-black/5 dark:bg-white/5 p-1 rounded-xl">
                         <button
@@ -676,7 +848,7 @@ const CreateQuizView = ({ onExit }: CreateQuizViewProps) => {
                     ].map((item, i) => (
                       <div
                         key={i}
-                        className="flex items-center justify-between p-5 rounded-[1.5rem] bg-black/5 dark:bg-white/5 border border-transparent hover:border-primary/20 transition-all group"
+                        className="flex items-center justify-between p-4 sm:p-5 rounded-2xl sm:rounded-[1.5rem] bg-black/5 dark:bg-white/5 border border-transparent hover:border-primary/20 transition-all group"
                       >
                         <div className="space-y-1">
                           <div className="font-bold text-sm group-hover:text-primary transition-colors flex items-center gap-2">
@@ -706,17 +878,23 @@ const CreateQuizView = ({ onExit }: CreateQuizViewProps) => {
                   </div>
                 </div>
 
-                <div className="flex gap-4">
+                <div className="hidden sm:flex flex-col sm:flex-row gap-3 sm:gap-4">
                   <Button
-                    onClick={() => setStep(1)}
+                    onClick={() => {
+                      hapticSelection();
+                      setStep(1);
+                    }}
                     variant="glass"
-                    className="flex-1 py-8 text-xl"
+                    className="flex-1 py-5 sm:py-8 text-base sm:text-xl"
                   >
                     Назад
                   </Button>
                   <Button
-                    onClick={() => setStep(3)}
-                    className="flex-[2] py-8 text-xl bg-gradient-to-r from-primary to-purple-600 shadow-lg shadow-primary/20"
+                    onClick={() => {
+                      hapticSelection();
+                      setStep(3);
+                    }}
+                    className="flex-[2] py-5 sm:py-8 text-base sm:text-xl bg-gradient-to-r from-primary to-purple-600 shadow-lg shadow-primary/20"
                   >
                     Создать вопросы
                   </Button>
@@ -732,17 +910,20 @@ const CreateQuizView = ({ onExit }: CreateQuizViewProps) => {
                 className="space-y-8"
               >
                 <div className="space-y-2">
-                  <h3 className="text-3xl font-black">Вопросы</h3>
-                  <p className="text-muted-foreground font-medium">
+                  <h3 className="text-2xl sm:text-3xl font-black">Вопросы</h3>
+                  <p className="text-sm sm:text-base text-muted-foreground font-medium">
                     Добавьте вопросы и варианты ответов.
                   </p>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex items-center gap-2 overflow-x-auto pb-1 -mx-1 px-1">
                   {questions.map((_, index) => (
                     <button
                       key={questions[index]?.id ?? index}
-                      onClick={() => setActiveQuestionIndex(index)}
+                      onClick={() => {
+                        hapticSelection();
+                        setActiveQuestionIndex(index);
+                      }}
                       className={cn(
                         "w-10 h-10 rounded-xl text-xs font-black uppercase transition-all border",
                         index === activeQuestionIndex
@@ -761,10 +942,13 @@ const CreateQuizView = ({ onExit }: CreateQuizViewProps) => {
                   </button>
                 </div>
 
-                <div className="p-8 rounded-[2rem] bg-card/60 dark:bg-slate-900/70 border border-black/5 dark:border-white/10 backdrop-blur-lg space-y-8 relative overflow-hidden">
+                <div className="p-4 sm:p-8 rounded-2xl sm:rounded-[2rem] bg-card/60 dark:bg-slate-900/70 border border-black/5 dark:border-white/10 backdrop-blur-lg space-y-8 relative overflow-hidden">
                   {questions.length > 1 && (
                     <button
-                      onClick={handleRemoveQuestion}
+                      onClick={() => {
+                      hapticSelection();
+                      handleRemoveQuestion();
+                    }}
                       className="absolute top-0 right-0 m-4 p-2 rounded-xl bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-all"
                     >
                       <Trash2 size={16} />
@@ -775,8 +959,8 @@ const CreateQuizView = ({ onExit }: CreateQuizViewProps) => {
                     <label className="text-xs font-black uppercase tracking-widest opacity-50 ml-1">
                       URL медиа (опционально)
                     </label>
-                    <div className="flex items-center gap-3 p-4 rounded-2xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10">
-                      <ImageIcon className="w-5 h-5 text-white/30" />
+                    <div className="flex items-center gap-2 sm:gap-3 p-3 sm:p-4 rounded-2xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10">
+                      <ImageIcon className="w-4 h-4 sm:w-5 sm:h-5 text-white/30 flex-shrink-0" />
                       <input
                         type="text"
                         placeholder="https://... (jpg/png/mp4/webm)"
@@ -789,9 +973,38 @@ const CreateQuizView = ({ onExit }: CreateQuizViewProps) => {
                             mediaType: inferMediaType(value),
                           }));
                         }}
-                        className="flex-1 bg-transparent outline-none font-bold text-sm"
+                        className="flex-1 bg-transparent outline-none font-bold text-xs sm:text-sm min-w-0"
+                      />
+                      <label
+                        htmlFor="media-upload-input"
+                        className={cn(
+                          "px-3 py-2 rounded-xl text-[10px] sm:text-xs font-black uppercase tracking-widest border border-primary/30 text-primary whitespace-nowrap",
+                          isUploadingMedia
+                            ? "opacity-60 cursor-wait"
+                            : "cursor-pointer hover:bg-primary/10",
+                        )}
+                      >
+                        Загрузить
+                      </label>
+                      <input
+                        id="media-upload-input"
+                        type="file"
+                        accept="image/*,video/*"
+                        className="hidden"
+                        onChange={handleMediaUpload}
+                        disabled={isUploadingMedia}
                       />
                     </div>
+                    {isUploadingMedia && (
+                      <div className="text-[10px] font-bold text-primary/70">
+                        Загрузка файла...
+                      </div>
+                    )}
+                    {mediaUploadError && (
+                      <div className="text-[10px] font-bold text-red-500">
+                        {mediaUploadError}
+                      </div>
+                    )}
                     {activeQuestion.mediaUrl && (
                       <div className="rounded-2xl overflow-hidden border border-white/10 shadow-2xl">
                         {activeQuestion.mediaType === "video" ? (
@@ -825,7 +1038,7 @@ const CreateQuizView = ({ onExit }: CreateQuizViewProps) => {
                     </div>
                     <textarea
                       placeholder="Введите ваш вопрос..."
-                      className="w-full p-4 rounded-xl bg-black/5 dark:bg-white/5 border-2 border-transparent focus:border-primary/50 outline-none font-bold resize-none h-32"
+                      className="w-full p-3 sm:p-4 rounded-xl bg-black/5 dark:bg-white/5 border-2 border-transparent focus:border-primary/50 outline-none font-bold resize-none h-24 sm:h-32 text-sm sm:text-base"
                       value={activeQuestion.text}
                       onChange={(e) =>
                         updateActiveQuestion((draft) => ({
@@ -873,6 +1086,12 @@ const CreateQuizView = ({ onExit }: CreateQuizViewProps) => {
                       </div>
                     ))}
                   </div>
+                  {activeQuestion.requiresSubscription && (
+                    <p className="text-[10px] font-medium opacity-50">
+                      Если вопрос только для проверки подписки, варианты можно
+                      оставить пустыми.
+                    </p>
+                  )}
 
                   <div className="pt-4 border-t border-white/5">
                     <button
@@ -917,41 +1136,77 @@ const CreateQuizView = ({ onExit }: CreateQuizViewProps) => {
                     </button>
                   </div>
                   {needsChannelUrl && (
-                    <div className="space-y-3 p-5 rounded-[1.5rem] bg-[#229ED9]/5 border border-[#229ED9]/20">
-                      <label className="text-xs font-black uppercase tracking-widest text-[#229ED9]">
-                        URL канала для проверки подписки
-                      </label>
+                    <div className="space-y-3 p-5 rounded-[1.5rem] bg-[#229ED9]/10 border-2 border-[#229ED9]/30">
+                      <div className="flex items-center gap-2">
+                        <Lock size={14} className="text-[#229ED9]" />
+                        <label className="text-xs font-black uppercase tracking-widest text-[#229ED9]">
+                          URL канала для проверки подписки
+                          <span className="text-red-500 ml-1">*</span>
+                        </label>
+                      </div>
                       <input
                         type="text"
-                        placeholder="https://t.me/your_channel"
+                        placeholder="https://t.me/your_channel или @channelname"
                         value={channelUrl}
                         onChange={(e) => setChannelUrl(e.target.value)}
-                        className="w-full p-3 rounded-xl bg-black/5 dark:bg-white/5 border border-[#229ED9]/20 outline-none font-bold"
+                        className={cn(
+                          "w-full p-3 rounded-xl bg-black/5 dark:bg-white/5 border-2 outline-none font-bold transition-colors",
+                          needsChannelUrl && !channelUrl.trim()
+                            ? "border-red-500/50 focus:border-red-500"
+                            : "border-[#229ED9]/20 focus:border-[#229ED9]",
+                        )}
                       />
+                      {needsChannelUrl && !channelUrl.trim() && (
+                        <p className="text-[10px] font-bold text-red-500 flex items-center gap-1">
+                          <XCircle size={12} /> Обязательно укажите ссылку на канал
+                        </p>
+                      )}
+                      <p className="text-[10px] font-medium opacity-60">
+                        Формат: https://t.me/channelname или @channelname
+                      </p>
                     </div>
                   )}
                 </div>
 
                 <Button
                   variant="glass"
-                  className="w-full border-dashed border-2 py-6"
-                  onClick={handleAddQuestion}
+                  className="w-full border-dashed border-2 py-5 sm:py-6 text-sm sm:text-base"
+                  onClick={() => {
+                    hapticSelection();
+                    handleAddQuestion();
+                  }}
                 >
-                  <Plus className="mr-2" /> Добавить вопрос
+                  <Plus className="mr-2 w-4 h-4 sm:w-5 sm:h-5" /> Добавить вопрос
                 </Button>
 
-                <div className="flex gap-4 pt-4">
+                {validationError && (
+                  <div className="p-4 rounded-xl bg-red-500/10 border-2 border-red-500/30 flex items-start gap-3">
+                    <XCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <div className="text-sm font-bold text-red-500 mb-1">
+                        Нельзя опубликовать
+                      </div>
+                      <div className="text-xs text-red-500/80 font-medium">
+                        {validationError}
+                      </div>
+                    </div>
+                  </div>
+                )}
+                <div className="hidden sm:flex flex-col sm:flex-row gap-3 sm:gap-4 pt-4">
                   <Button
-                    onClick={() => setStep(2)}
+                    onClick={() => {
+                      hapticSelection();
+                      setStep(2);
+                    }}
                     variant="glass"
-                    className="flex-1 py-8 text-xl"
+                    className="flex-1 py-6 sm:py-8 text-lg sm:text-xl"
                   >
                     Назад
                   </Button>
                   <Button
                     onClick={handlePublish}
-                  disabled={isPublishing || Boolean(validationError)}
-                    className="flex-[2] py-8 text-xl bg-gradient-to-r from-green-500 to-emerald-600 shadow-lg shadow-green-500/20"
+                    disabled={isPublishing || Boolean(validationError)}
+                    className="flex-[2] py-6 sm:py-8 text-lg sm:text-xl bg-gradient-to-r from-green-500 to-emerald-600 shadow-lg shadow-green-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {isPublishing ? "Публикуем..." : "Опубликовать"}
                   </Button>
@@ -961,6 +1216,45 @@ const CreateQuizView = ({ onExit }: CreateQuizViewProps) => {
           </AnimatePresence>
         </div>
       </main>
+      {!isPublished && (
+        <div className="sm:hidden fixed bottom-0 left-0 right-0 z-30 px-4 pb-[max(env(safe-area-inset-bottom),12px)] pt-3 bg-background/90 backdrop-blur-md border-t border-black/5 dark:border-white/10">
+          <div className="flex items-center gap-2">
+            {step > 1 && (
+              <Button
+                variant="glass"
+                className="flex-1 py-4 text-base"
+                onClick={() => {
+                  hapticSelection();
+                  setStep(step - 1);
+                }}
+              >
+                Назад
+              </Button>
+            )}
+            {step < 3 && (
+              <Button
+                className="flex-[2] py-4 text-base bg-gradient-to-r from-primary to-purple-600"
+                disabled={step === 1 && (!quizName || !category)}
+                onClick={() => {
+                  hapticSelection();
+                  setStep(step + 1);
+                }}
+              >
+                Далее
+              </Button>
+            )}
+            {step === 3 && (
+              <Button
+                onClick={handlePublish}
+                disabled={isPublishing || Boolean(validationError)}
+                className="flex-[2] py-4 text-base bg-gradient-to-r from-green-500 to-emerald-600 shadow-lg shadow-green-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isPublishing ? "Публикуем..." : "Опубликовать"}
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

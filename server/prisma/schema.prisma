@@ -1,6 +1,5 @@
 generator client {
   provider = "prisma-client-js"
-  engineType = "binary"
 }
 
 datasource db {
@@ -46,6 +45,8 @@ model Question {
 
 model Answer {
   id          String   @id @default(cuid())
+  attemptId   String?
+  attempt     QuizAttempt? @relation(fields: [attemptId], references: [id])
   visitorId   String
   visitor     Visitor  @relation(fields: [visitorId], references: [id])
   questionId  String
@@ -58,7 +59,7 @@ model Answer {
   score       Int
   answeredAt  DateTime @default(now())
 
-  @@unique([visitorId, questionId])
+  @@index([attemptId, questionId])
   @@index([quizId, questionId])
   @@index([questionId, answerIndex])
 }
@@ -69,13 +70,14 @@ model QuizAttempt {
   visitor        Visitor  @relation(fields: [visitorId], references: [id])
   quizId         String
   quiz           Quiz     @relation(fields: [quizId], references: [id])
-  totalScore     Int
-  correctCount   Int
-  totalQuestions Int
+  answers        Answer[]
+  totalScore     Int      @default(0)
+  correctCount   Int      @default(0)
+  totalQuestions Int      @default(0)
   isFirstAttempt Boolean  @default(true)
-  completedAt    DateTime @default(now())
+  startedAt      DateTime @default(now())
+  completedAt    DateTime?
 
-  @@unique([visitorId, quizId, isFirstAttempt])
   @@index([quizId, isFirstAttempt, totalScore])
   @@index([visitorId, quizId])
 }

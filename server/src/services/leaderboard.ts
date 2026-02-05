@@ -51,18 +51,24 @@ export const primeLeaderboardCache = async (quizId: string) => {
   }
 
   const attempts = await prisma.quizAttempt.findMany({
-    where: { quizId, isFirstAttempt: true },
+    where: {
+      quizId,
+      isFirstAttempt: true,
+      completedAt: { not: { equals: null } },
+    },
     include: { visitor: true },
     orderBy: [{ totalScore: "desc" }, { completedAt: "asc" }],
   });
 
   const byVisitor = new Map<string, LeaderboardEntry>();
   const sorted = attempts.map((attempt) => {
-    const entry = {
+    const completedAt = attempt.completedAt ?? new Date();
+    const visitor = attempt.visitor;
+    const entry: LeaderboardEntry = {
       visitorId: attempt.visitorId,
-      name: getDisplayName(attempt.visitor),
+      name: getDisplayName(visitor),
       score: attempt.totalScore,
-      completedAt: attempt.completedAt,
+      completedAt,
     };
     byVisitor.set(attempt.visitorId, entry);
     return entry;

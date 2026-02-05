@@ -9,25 +9,27 @@ import {
 } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import { cn } from "../lib/cn";
+import { hapticSelection } from "../lib/telegramUi";
 
 type HomeViewProps = {
   onStart: () => void;
   onAdmin: () => void;
   onCreate: () => void;
   isAdmin: boolean;
+  hasQuizId?: boolean;
 };
 
-const HomeView = ({ onStart, onAdmin, onCreate, isAdmin }: HomeViewProps) => (
-  <div className="flex flex-col items-center justify-center min-h-[100dvh] w-full max-w-7xl mx-auto p-6 relative overflow-hidden">
-    <div className="absolute top-1/4 left-1/4 w-64 h-64 bg-primary/20 dark:bg-primary/30 rounded-full blur-[120px] animate-pulse pointer-events-none" />
-    <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-purple-600/10 dark:bg-purple-600/20 rounded-full blur-[150px] pointer-events-none" />
+const HomeView = ({ onStart, onAdmin, onCreate, isAdmin, hasQuizId }: HomeViewProps) => (
+  <div className="fx-scroll flex flex-col items-center justify-start md:justify-center min-h-[100dvh] w-full max-w-7xl mx-auto px-6 py-10 relative overflow-x-hidden overflow-y-auto overscroll-y-contain">
+    <div className="fx-blob absolute top-1/4 left-1/4 w-64 h-64 bg-primary/20 dark:bg-primary/30 rounded-full blur-[120px] animate-pulse pointer-events-none" />
+    <div className="fx-blob absolute bottom-1/4 right-1/4 w-96 h-96 bg-purple-600/10 dark:bg-purple-600/20 rounded-full blur-[150px] pointer-events-none" />
 
     <motion.div
       initial={{ opacity: 0, y: 30 }}
       animate={{ opacity: 1, y: 0 }}
-      className="text-center space-y-8 z-10 w-full max-w-2xl"
+      className="text-center space-y-8 z-10 w-full max-w-2xl mt-6"
     >
-      <div className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10 backdrop-blur-md shadow-2xl">
+      <div className="fx-backdrop inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10 backdrop-blur-md shadow-2xl">
         <span className="relative flex h-3 w-3">
           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
           <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500" />
@@ -38,31 +40,43 @@ const HomeView = ({ onStart, onAdmin, onCreate, isAdmin }: HomeViewProps) => (
       </div>
 
       <h1 className="text-6xl md:text-8xl font-black tracking-tighter leading-[0.85] text-foreground">
-        QUIZ
+        QUARDO
         <br />
         <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary via-purple-400 to-pink-500">
-          EVOLUTION
+          QUIZ
         </span>
       </h1>
 
       <p className="text-lg md:text-xl text-muted-foreground max-w-lg mx-auto font-medium leading-relaxed px-4">
-        Первое в мире квиз-приложение с голосованием в реальном времени и
-        нейро-дизайном.
+        Быстрые квизы и живые результаты в каждом вопросе.
       </p>
 
       <div className="flex flex-col sm:flex-row gap-4 justify-center pt-4 px-4">
-        <Button
-          onClick={onStart}
-          size="lg"
-          className="group px-10 bg-gradient-to-r from-primary to-purple-600 w-full sm:w-auto"
-        >
-          Играть сейчас{" "}
-          <ChevronRight className="ml-2 group-hover:translate-x-1 transition-transform" />
-        </Button>
+        <div className="flex flex-col items-center gap-2 w-full sm:w-auto">
+          <Button
+            onClick={() => {
+              hapticSelection();
+              onStart();
+            }}
+            size="lg"
+            className="group px-10 bg-gradient-to-r from-primary to-purple-600 w-full sm:w-auto"
+          >
+            Играть сейчас{" "}
+            <ChevronRight className="ml-2 group-hover:translate-x-1 transition-transform" />
+          </Button>
+          {!hasQuizId && (
+            <p className="text-xs text-muted-foreground font-medium text-center px-2">
+              Перейдите по ссылке квиза от бота, чтобы начать игру
+            </p>
+          )}
+        </div>
         {isAdmin && (
           <div className="flex gap-4 w-full sm:w-auto">
             <Button
-              onClick={onCreate}
+              onClick={() => {
+                hapticSelection();
+                onCreate();
+              }}
               variant="glass"
               size="lg"
               className="text-foreground flex-1 sm:flex-none"
@@ -70,7 +84,10 @@ const HomeView = ({ onStart, onAdmin, onCreate, isAdmin }: HomeViewProps) => (
               <Plus className="mr-2 w-5 h-5" /> Создать
             </Button>
             <Button
-              onClick={onAdmin}
+              onClick={() => {
+                hapticSelection();
+                onAdmin();
+              }}
               variant="glass"
               size="lg"
               className="text-foreground flex-1 sm:flex-none"

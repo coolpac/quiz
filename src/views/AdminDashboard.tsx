@@ -10,14 +10,17 @@ import {
   LayoutDashboard,
   List,
   LogOut,
+  Pencil,
   PieChart,
   Play,
   Plus,
   QrCode,
+  RotateCcw,
   Settings,
   ShieldCheck,
   Sparkles,
   Trophy,
+  Trash2,
   Users,
   XCircle,
 } from "lucide-react";
@@ -28,6 +31,7 @@ import { Badge } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
 import { useToast } from "../components/Toast";
 import { cn } from "../lib/cn";
+import { hapticSelection } from "../lib/telegramUi";
 import type {
   AdminAnswerItem,
   LeaderboardPlayer,
@@ -37,7 +41,7 @@ import type {
 
 type AdminDashboardProps = {
   onExit: () => void;
-  onCreateQuiz: () => void;
+  onCreateQuiz: (quizId?: string | null) => void;
   quizId?: string | null;
 };
 
@@ -95,6 +99,7 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
     () => myQuizzes.find((quiz) => quiz.id === selectedQuizId) ?? null,
     [myQuizzes, selectedQuizId],
   );
+
 
   useEffect(() => {
     if (quizId) {
@@ -343,10 +348,12 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
 
   if (!selectedQuizId) {
     return (
-      <div className="admin-shell min-h-screen bg-background text-foreground flex items-center justify-center p-6">
-        <div className="w-full max-w-2xl p-10 rounded-[2.5rem] bg-white/5 border border-white/10 space-y-6">
+      <div className="admin-shell min-h-screen bg-background text-foreground flex items-center justify-center p-4 sm:p-6">
+        <div className="w-full max-w-2xl p-6 sm:p-10 rounded-2xl sm:rounded-[2.5rem] bg-white/5 border border-white/10 space-y-6">
           <div className="space-y-2">
-            <h3 className="text-3xl font-black">Выберите квиз для мониторинга</h3>
+            <h3 className="text-2xl sm:text-3xl font-black">
+              Выберите квиз для мониторинга
+            </h3>
             <p className="text-sm text-white/50 font-medium">
               Найдите квиз из списка и подключитесь к live-данным.
             </p>
@@ -364,7 +371,10 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
               {myQuizzes.map((quiz) => (
                 <button
                   key={quiz.id}
-                  onClick={() => setSelectedQuizId(quiz.id)}
+                  onClick={() => {
+                    hapticSelection();
+                    setSelectedQuizId(quiz.id);
+                  }}
                   className="w-full p-5 rounded-2xl bg-white/5 border border-white/10 hover:border-primary/40 transition-all text-left"
                 >
                   <div className="flex items-center justify-between">
@@ -389,7 +399,13 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
               ))}
             </div>
           )}
-          <Button onClick={onCreateQuiz} className="w-full py-6 text-lg">
+          <Button
+            onClick={() => {
+              hapticSelection();
+              onCreateQuiz(null);
+            }}
+            className="w-full py-4 sm:py-6 text-base sm:text-lg"
+          >
             Создать новый квиз
           </Button>
         </div>
@@ -398,9 +414,17 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
   }
 
   return (
-    <div className="admin-shell min-h-screen bg-background text-foreground flex overflow-hidden">
-      <div className="w-20 md:w-64 border-r border-white/10 flex flex-col items-center md:items-start p-6 gap-8 bg-black/20 backdrop-blur-md">
-        <div className="flex items-center gap-3">
+    <div className="admin-shell min-h-screen bg-background text-foreground flex flex-col md:flex-row overflow-x-hidden">
+      <div
+        className={cn(
+          "w-full md:w-64 flex flex-row md:flex-col items-center md:items-start gap-2 md:gap-8 fixed md:static bottom-0 md:top-0 left-0 right-0 z-30 transition-transform duration-200",
+          "md:translate-y-0",
+          "md:fx-backdrop md:border-r md:border-white/10 md:p-6 md:bg-black/20 md:backdrop-blur-md",
+          "pb-[max(env(safe-area-inset-bottom),12px)] pt-3 px-3 md:pb-0 md:pt-0 md:px-0",
+          "backdrop-blur-xl bg-white/10 dark:bg-black/25 border-t border-white/20 shadow-[0_-8px_32px_rgba(0,0,0,0.12)] dark:shadow-[0_-8px_32px_rgba(0,0,0,0.4)]",
+        )}
+      >
+        <div className="hidden md:flex items-center gap-3 shrink-0">
           <div className="w-10 h-10 rounded-2xl bg-primary flex items-center justify-center font-black shadow-lg shadow-primary/20">
             S
           </div>
@@ -409,7 +433,7 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
           </span>
         </div>
 
-        <nav className="flex-1 w-full space-y-2">
+        <nav className="w-full flex md:flex-1 md:flex-col gap-2 md:space-y-2 overflow-x-auto md:overflow-visible">
           {[
             { id: "dashboard", icon: LayoutDashboard, label: "Дашборд" },
             { id: "quizzes", icon: List, label: "Квизы" },
@@ -419,15 +443,18 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
           ].map((item) => (
             <button
               key={item.id}
-              onClick={() => setActiveTab(item.id)}
+              onClick={() => {
+                hapticSelection();
+                setActiveTab(item.id);
+              }}
               className={cn(
-                "w-full flex items-center gap-4 p-4 rounded-2xl transition-all group relative overflow-hidden",
+                "min-h-[52px] min-w-[52px] md:min-h-0 md:min-w-0 flex items-center justify-center md:justify-start gap-3 md:gap-4 py-3 px-4 md:p-4 rounded-2xl transition-all group relative overflow-hidden flex-1 md:flex-none",
                 activeTab === item.id
                   ? "bg-primary text-white shadow-lg shadow-primary/20"
-                  : "hover:bg-black/5 dark:hover:bg-white/5 text-white/50 hover:text-foreground dark:hover:text-white",
+                  : "bg-white/10 dark:bg-white/5 text-white/70 hover:bg-white/20 dark:hover:bg-white/10 hover:text-foreground dark:hover:text-white border border-white/10",
               )}
             >
-              <item.icon size={20} />
+              <item.icon className="shrink-0 md:w-5 md:h-5 w-6 h-6" size={24} />
               <span className="font-bold hidden md:block">{item.label}</span>
               {item.id === "live" && (
                 <span className="absolute right-4 top-1/2 -translate-y-1/2 w-2 h-2 bg-red-500 rounded-full animate-ping hidden md:block" />
@@ -437,27 +464,30 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
         </nav>
 
         <button
-          onClick={onExit}
-          className="w-full flex items-center gap-4 p-4 rounded-2xl text-red-500 hover:bg-red-500/10 transition-all"
+          onClick={() => {
+            hapticSelection();
+            onExit();
+          }}
+          className="min-h-[52px] min-w-[52px] md:min-h-0 md:min-w-0 flex items-center justify-center md:justify-start gap-3 md:gap-4 py-3 px-4 md:p-4 rounded-2xl text-red-500 hover:bg-red-500/15 dark:hover:bg-red-500/10 transition-all flex-1 md:flex-none bg-white/10 dark:bg-white/5 border border-white/10 hover:border-red-500/30"
         >
-          <LogOut size={20} />
+          <LogOut className="shrink-0 md:w-5 md:h-5 w-6 h-6" size={24} />
           <span className="font-bold hidden md:block">Выйти</span>
         </button>
       </div>
 
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <header className="h-24 border-b border-white/10 px-8 flex items-center justify-between backdrop-blur-md bg-black/50">
+      <div className="flex-1 flex flex-col overflow-hidden pb-20 md:pb-0">
+        <header className="h-16 sm:h-20 md:h-24 border-b border-white/10 px-4 sm:px-6 md:px-8 flex flex-col sm:flex-row sm:items-center items-start justify-between gap-3 backdrop-blur-md bg-black/50">
           <div className="space-y-1">
-            <h2 className="text-2xl font-black">
+            <h2 className="text-xl sm:text-2xl font-black">
               {activeTab === "dashboard" && "Обзор системы"}
               {activeTab === "live" && "Live Мониторинг"}
               {activeTab === "quizzes" && "Управление квизами"}
             </h2>
-            <p className="text-xs font-bold text-white/30 uppercase tracking-widest">
+            <p className="text-[10px] sm:text-xs font-bold text-white/30 uppercase tracking-widest">
               {formattedDate}
             </p>
           </div>
-          <div className="flex items-center gap-6">
+          <div className="flex items-center gap-4 sm:gap-6">
             <div className="hidden sm:flex flex-col items-end">
               <span className="text-sm font-bold">Администратор</span>
               <span className="text-xs text-primary font-bold uppercase tracking-widest">
@@ -475,8 +505,8 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
           </div>
         </header>
 
-        <main className="flex-1 overflow-auto p-8 space-y-8">
-          <div className="p-6 rounded-[2rem] bg-white/5 border border-white/10 space-y-4">
+        <main className="flex-1 overflow-auto p-4 sm:p-6 md:p-8 space-y-4 sm:space-y-6 md:space-y-8">
+          <div className="p-4 sm:p-6 rounded-2xl sm:rounded-[2rem] bg-white/5 border border-white/10 space-y-4">
             <div className="text-xs font-black uppercase tracking-widest text-white/40">
               Квиз
             </div>
@@ -503,8 +533,9 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
               </select>
               <Button
                 variant="glass"
-                className="px-6"
+                className="px-4 sm:px-6"
                 onClick={() => {
+                  hapticSelection();
                   void refreshMyQuizzes();
                 }}
               >
@@ -513,7 +544,7 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
             </div>
           </div>
 
-          <div className="p-6 rounded-[2rem] bg-white/5 border border-white/10 space-y-4">
+          <div className="p-4 sm:p-6 rounded-2xl sm:rounded-[2rem] bg-white/5 border border-white/10 space-y-4">
             <div className="text-xs font-black uppercase tracking-widest text-white/40">
               Admin Token
             </div>
@@ -527,7 +558,13 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
                 placeholder="Admin token"
                 className="flex-1 p-3 rounded-xl bg-black/40 border border-white/10 focus:border-primary outline-none font-bold text-sm"
               />
-              <Button onClick={saveAdminToken} className="px-6">
+              <Button
+                onClick={() => {
+                  hapticSelection();
+                  saveAdminToken();
+                }}
+                className="px-6"
+              >
                 Сохранить
               </Button>
             </div>
@@ -643,7 +680,7 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
                     <Button
                       className="w-full mt-6 bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 text-foreground dark:text-white border border-black/10 dark:border-white/10"
                       onClick={() => {
-                        // TODO: implement quizzes list
+                        hapticSelection();
                         pushToast("Список квизов скоро", "info");
                       }}
                     >
@@ -666,7 +703,10 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
                   <h3 className="text-2xl font-black">Управление квизами</h3>
                   <Button
                     className="bg-primary hover:bg-primary/90"
-                    onClick={onCreateQuiz}
+                    onClick={() => {
+                      hapticSelection();
+                      onCreateQuiz(null);
+                    }}
                   >
                     <Plus className="mr-2 w-5 h-5" /> Новый квиз
                   </Button>
@@ -676,7 +716,10 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
                   <motion.div
                     whileHover={{ scale: 1.02 }}
                     className="p-8 rounded-[2.5rem] border-2 border-dashed border-white/10 flex flex-col items-center justify-center gap-4 hover:border-primary/50 hover:bg-primary/5 transition-all cursor-pointer group"
-                    onClick={onCreateQuiz}
+                    onClick={() => {
+                      hapticSelection();
+                      onCreateQuiz(null);
+                    }}
                   >
                     <div className="p-4 rounded-2xl bg-white/5 text-white/40 group-hover:text-primary group-hover:scale-110 transition-all">
                       <Plus size={32} />
@@ -698,45 +741,109 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
                     <motion.div
                       key={quiz.id}
                       whileHover={{ y: -5 }}
-                      className="p-8 rounded-[2.5rem] bg-white/5 border border-white/10 hover:border-primary/30 transition-all relative overflow-hidden group"
+                      className="p-4 sm:p-8 rounded-2xl sm:rounded-[2.5rem] bg-white/5 border border-white/10 hover:border-primary/30 transition-all relative overflow-hidden group"
                     >
-                      <div className="absolute top-0 right-0 p-6">
+                      <div className="absolute top-0 right-0 p-4 sm:p-6">
                         <Badge variant={quiz.isExpired ? "default" : "success"}>
                           {quiz.isExpired ? "Expired" : "Live"}
                         </Badge>
                       </div>
                       <div className="space-y-4">
-                        <div className="p-3 rounded-xl bg-primary/10 text-primary w-fit">
-                          <LayoutDashboard size={24} />
+                        <div className="p-2 sm:p-3 rounded-xl bg-primary/10 text-primary w-fit">
+                          <LayoutDashboard size={20} />
                         </div>
                         <div>
-                          <h4 className="text-xl font-black group-hover:text-primary transition-colors">
+                          <h4 className="text-lg sm:text-xl font-black group-hover:text-primary transition-colors">
                             {quiz.title}
                           </h4>
-                          <div className="flex gap-4 mt-2 text-sm text-white/40 font-bold uppercase tracking-widest">
+                          <div className="flex flex-wrap gap-3 mt-2 text-[10px] sm:text-sm text-white/40 font-bold uppercase tracking-widest">
                             <span>{quiz.questionsCount} вопросов</span>
                             <span>{quiz.attemptsCount} игр</span>
                           </div>
                         </div>
-                        <div className="flex gap-2 pt-4">
+                        <div className="flex flex-col gap-2 pt-4">
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              variant="glass"
+                              className="flex-1"
+                              onClick={() => {
+                                hapticSelection();
+                                onCreateQuiz(quiz.id);
+                              }}
+                            >
+                              <Pencil size={14} className="mr-1" /> Редактировать
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="flex-1 gap-2"
+                              onClick={() => {
+                                hapticSelection();
+                                setShowQR(quiz.id);
+                              }}
+                            >
+                              <QrCode size={14} /> Ссылка
+                            </Button>
+                          </div>
                           <Button
                             size="sm"
                             variant="glass"
-                            className="flex-1"
-                            onClick={() => {
-                              // TODO: implement quiz editing
-                              pushToast("Редактирование скоро", "info");
+                            className="w-full"
+                            onClick={async () => {
+                              hapticSelection();
+                              if (
+                                !confirm(
+                                  "Перезапустить квиз? Все результаты и лидерборд будут сброшены, но вопросы останутся.",
+                                )
+                              ) {
+                                return;
+                              }
+                              try {
+                                await api.resetQuiz(quiz.id);
+                                pushToast("Квиз перезапущен", "success");
+                                void refreshMyQuizzes();
+                              } catch (error) {
+                                const message =
+                                  error instanceof Error && error.message
+                                    ? error.message
+                                    : "Не удалось перезапустить квиз";
+                                pushToast(message, "error");
+                              }
                             }}
                           >
-                            Редактировать
+                            <RotateCcw size={14} className="mr-1" /> Перезапустить
                           </Button>
                           <Button
                             size="sm"
-                            variant="outline"
-                            className="flex-1 gap-2"
-                            onClick={() => setShowQR(quiz.id)}
+                            variant="glass"
+                            className="w-full text-red-500 hover:text-red-600 hover:bg-red-500/10 border-red-500/20"
+                            onClick={async () => {
+                              hapticSelection();
+                              if (
+                                !confirm(
+                                  `Удалить квиз "${quiz.title}"? Это действие нельзя отменить. Все данные (вопросы, результаты, лидерборд) будут удалены навсегда.`,
+                                )
+                              ) {
+                                return;
+                              }
+                              try {
+                                await api.deleteQuiz(quiz.id);
+                                pushToast("Квиз удален", "success");
+                                void refreshMyQuizzes();
+                                if (selectedQuizId === quiz.id) {
+                                  setSelectedQuizId(null);
+                                }
+                              } catch (error) {
+                                const message =
+                                  error instanceof Error && error.message
+                                    ? error.message
+                                    : "Не удалось удалить квиз";
+                                pushToast(message, "error");
+                              }
+                            }}
                           >
-                            <QrCode size={14} /> Ссылка
+                            <Trash2 size={14} className="mr-1" /> Удалить квиз
                           </Button>
                         </div>
                       </div>
@@ -751,7 +858,10 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
                       animate={{ opacity: 1 }}
                       exit={{ opacity: 0 }}
                       className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/80 backdrop-blur-md"
-                      onClick={() => setShowQR(null)}
+                      onClick={() => {
+                        hapticSelection();
+                        setShowQR(null);
+                      }}
                     >
                       <motion.div
                         initial={{ scale: 0.9, y: 20 }}
@@ -762,7 +872,10 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
                       >
                         <div className="absolute top-0 right-0 p-6">
                           <button
-                            onClick={() => setShowQR(null)}
+                            onClick={() => {
+                              hapticSelection();
+                              setShowQR(null);
+                            }}
                             className="p-2 hover:bg-black/5 dark:hover:bg-white/5 rounded-full transition-colors"
                           >
                             <XCircle className="w-6 h-6 opacity-30" />
@@ -795,7 +908,7 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
                               <button
                                 className="p-2 hover:bg-primary/10 hover:text-primary rounded-xl transition-all"
                                 onClick={() => {
-                                  // TODO: implement link copy feedback
+                                  hapticSelection();
                                   if (qrQuiz?.deepLink) {
                                     navigator.clipboard.writeText(qrQuiz.deepLink);
                                     pushToast("Ссылка скопирована", "success");

@@ -12,9 +12,11 @@ import { shareURL } from "@telegram-apps/sdk";
 import { api } from "../api";
 import { connectSocket, releaseSocket } from "../socket";
 import { Badge } from "../components/ui/Badge";
+import SocketStatusBadge from "../components/SocketStatusBadge";
 import { Button } from "../components/ui/Button";
 import { cn } from "../lib/cn";
 import { useToast, type ToastVariant } from "../components/Toast";
+import { hapticSelection } from "../lib/telegramUi";
 import type { LeaderboardPlayer, QuizResults } from "../types/quiz";
 
 type LeaderboardItemProps = {
@@ -57,7 +59,15 @@ type ResultViewProps = {
 };
 
 const ResultView = ({ results, onRestart }: ResultViewProps) => {
-  const { score, correctCount, totalQuestions, isFirstAttempt, quizId } = results;
+  const {
+    score,
+    correctCount,
+    totalQuestions,
+    isFirstAttempt,
+    quizId,
+    previousCorrectCount,
+    previousTotalQuestions,
+  } = results;
   const [leaderboard, setLeaderboard] = useState<{
     players: LeaderboardPlayer[];
     myRank: number;
@@ -70,6 +80,16 @@ const ResultView = ({ results, onRestart }: ResultViewProps) => {
   const percentage = totalQuestions
     ? Math.round((correctCount / totalQuestions) * 100)
     : 0;
+
+  const previousPercentage =
+    previousTotalQuestions != null &&
+    previousTotalQuestions > 0 &&
+    previousCorrectCount != null
+      ? Math.round((previousCorrectCount / previousTotalQuestions) * 100)
+      : null;
+
+  const progressDelta =
+    previousPercentage != null ? percentage - previousPercentage : null;
 
   const progressHeights = useMemo(() => [40, 60, 45, 90, 65, 80, 100], []);
 
@@ -172,30 +192,33 @@ const ResultView = ({ results, onRestart }: ResultViewProps) => {
   }, [quizId, pushToast, refreshLeaderboard]);
 
   return (
-    <div className="min-h-[100dvh] w-full flex items-center justify-center p-4 md:p-8 bg-background relative overflow-x-hidden overflow-y-auto">
-      <div className="absolute top-[-10%] left-[-10%] w-[50vw] h-[50vw] bg-primary/20 dark:bg-primary/30 rounded-full blur-[120px] animate-pulse pointer-events-none" />
-      <div className="absolute bottom-[-10%] right-[-10%] w-[50vw] h-[50vw] bg-purple-500/10 rounded-full blur-[120px] pointer-events-none" />
+    <div className="fx-scroll h-[100dvh] w-full flex items-start justify-start p-4 md:p-8 bg-background relative overflow-x-hidden overflow-y-auto overscroll-y-contain">
+      <div className="fx-blob absolute top-[-10%] left-[-10%] w-[50vw] h-[50vw] bg-primary/20 dark:bg-primary/30 rounded-full blur-[120px] animate-pulse pointer-events-none" />
+      <div className="fx-blob absolute bottom-[-10%] right-[-10%] w-[50vw] h-[50vw] bg-purple-500/10 rounded-full blur-[120px] pointer-events-none" />
 
       <motion.div
         initial={{ opacity: 0, scale: 0.9, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
-        className="w-full max-w-5xl z-10 py-12"
+        className="w-full max-w-5xl z-10 py-12 mx-auto"
       >
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 md:gap-8 items-center">
           <div className="lg:col-span-7">
-            <div className="relative p-6 md:p-12 rounded-[2.5rem] md:rounded-[3rem] bg-card/60 dark:bg-slate-900/80 border border-black/5 dark:border-white/10 backdrop-blur-lg shadow-2xl overflow-hidden">
+            <div className="fx-backdrop relative p-6 md:p-12 rounded-[2.5rem] md:rounded-[3rem] bg-card/60 dark:bg-slate-900/80 border border-black/5 dark:border-white/10 backdrop-blur-lg shadow-2xl overflow-hidden">
               <div className="absolute top-0 right-0 p-6 md:p-8">
                 <Crown className="w-10 h-10 md:w-12 md:h-12 text-yellow-500 opacity-20 rotate-12" />
               </div>
 
               <div className="space-y-6 md:space-y-8 relative z-10">
-                <div className="space-y-2">
-                  <Badge
-                    variant="success"
-                    className="px-4 py-1.5 text-[10px] md:text-sm uppercase tracking-widest"
-                  >
-                    Тест завершен
-                  </Badge>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <Badge
+                      variant="success"
+                      className="px-4 py-1.5 text-[10px] md:text-sm uppercase tracking-widest"
+                    >
+                      Тест завершен
+                    </Badge>
+                    <SocketStatusBadge className="shrink-0" />
+                  </div>
                   <h2 className="text-4xl md:text-6xl font-black tracking-tighter text-foreground dark:text-white leading-tight">
                     Твой <br />
                     <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary via-purple-400 to-pink-500">
@@ -248,7 +271,10 @@ const ResultView = ({ results, onRestart }: ResultViewProps) => {
 
                 <div className="flex flex-col sm:flex-row gap-3 md:gap-4 pt-4">
                   <Button
-                    onClick={onRestart}
+                    onClick={() => {
+                      hapticSelection();
+                      onRestart();
+                    }}
                     size="lg"
                     className="flex-1 bg-gradient-to-r from-primary to-purple-600 w-full"
                   >
@@ -259,6 +285,7 @@ const ResultView = ({ results, onRestart }: ResultViewProps) => {
                     size="lg"
                     className="flex-1 text-foreground dark:text-white w-full"
                     onClick={() => {
+                      hapticSelection();
                       const shareLink = quizId
                         ? `${window.location.origin}?quizId=${quizId}`
                         : window.location.href;
@@ -291,7 +318,10 @@ const ResultView = ({ results, onRestart }: ResultViewProps) => {
                     variant="glass"
                     size="sm"
                     className="w-full"
-                    onClick={refreshLeaderboard}
+                    onClick={() => {
+                      hapticSelection();
+                      refreshLeaderboard();
+                    }}
                   >
                     <RotateCcw className="mr-2 w-4 h-4" /> Обновить таблицу
                   </Button>
@@ -327,8 +357,21 @@ const ResultView = ({ results, onRestart }: ResultViewProps) => {
                   <div className="text-[10px] font-bold uppercase tracking-widest opacity-60 text-foreground dark:text-white">
                     Прогресс
                   </div>
-                  <div className="text-lg md:text-xl font-black text-foreground dark:text-white">
-                    +12% к прошлому разу
+                  <div
+                    className={cn(
+                      "text-lg md:text-xl font-black",
+                      progressDelta != null && progressDelta > 0 && "text-green-600 dark:text-green-400",
+                      progressDelta != null && progressDelta < 0 && "text-red-600 dark:text-red-400",
+                      (progressDelta == null || progressDelta === 0) && "text-foreground dark:text-white",
+                    )}
+                  >
+                    {progressDelta != null
+                      ? progressDelta > 0
+                        ? `+${progressDelta}% к прошлому разу`
+                        : progressDelta < 0
+                          ? `${progressDelta}% к прошлому разу`
+                          : "Как в прошлый раз"
+                      : "Пройди ещё раз — покажем прогресс"}
                   </div>
                 </div>
               </div>

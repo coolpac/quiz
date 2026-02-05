@@ -2,7 +2,7 @@ import { prisma } from "../lib/prisma";
 import type { Prisma } from "@prisma/client";
 import { createClient, type RedisClientType } from "redis";
 
-export type BufferedAnswer = Prisma.AnswerCreateManyInput;
+export type BufferedAnswer = Prisma.AnswerCreateManyInput & { attemptId: string };
 export type StreamEntry = {
   id: string;
   message: Record<string, string>;
@@ -58,6 +58,7 @@ export const addAnswerToStream = async (data: BufferedAnswer) => {
   }
   const streamKey = streamKeyForQuiz(data.quizId);
   await client.xAdd(streamKey, "*", {
+    attemptId: data.attemptId,
     visitorId: data.visitorId,
     questionId: data.questionId,
     quizId: data.quizId,
@@ -124,15 +125,24 @@ export const parseAnswerMessages = (messages: StreamEntry[]): BufferedAnswer[] =
     return Number.isFinite(parsed) ? parsed : 0;
   };
 
-  return messages.map((entry) => ({
-    visitorId: entry.message.visitorId,
-    questionId: entry.message.questionId,
-    quizId: entry.message.quizId,
-    answerIndex: parseNumber(entry.message.answerIndex),
-    isCorrect: entry.message.isCorrect === "1" || entry.message.isCorrect === "true",
-    timeLeft: parseNumber(entry.message.timeLeft),
-    score: parseNumber(entry.message.score),
-  }));
+  return messages
+    .map((entry) => {
+      const attemptId = entry.message.attemptId;
+      if (!attemptId) {
+        return null;
+      }
+      return {
+        attemptId,
+        visitorId: entry.message.visitorId,
+        questionId: entry.message.questionId,
+        quizId: entry.message.quizId,
+        answerIndex: parseNumber(entry.message.answerIndex),
+        isCorrect: entry.message.isCorrect === "1" || entry.message.isCorrect === "true",
+        timeLeft: parseNumber(entry.message.timeLeft),
+        score: parseNumber(entry.message.score),
+      };
+    })
+    .filter((entry): entry is BufferedAnswer => Boolean(entry));
 };
 
 export const writeAnswers = async (answers: BufferedAnswer[]) => {

@@ -21,10 +21,14 @@ export const initSocket = (server: HttpServer) => {
       origin: appOrigin,
     },
     pingInterval: 25000,
-    pingTimeout: 20000,
-    transports: ["websocket"],
+    pingTimeout: 60000,
+    transports: ["websocket", "polling"],
     perMessageDeflate: false,
     maxHttpBufferSize: 1e5,
+    connectionStateRecovery: {
+      maxDisconnectionDuration: 2 * 60 * 1000,
+      skipMiddlewares: true,
+    },
   });
   setIO(io);
 

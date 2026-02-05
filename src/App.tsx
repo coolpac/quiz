@@ -23,6 +23,7 @@ function App({
   const [view, setView] = useState<"home" | "quiz" | "result" | "admin" | "create">(
     initialQuizId ? "quiz" : "home",
   );
+  const [editQuizId, setEditQuizId] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [quizId] = useState<string | null>(initialQuizId ?? null);
   const [results, setResults] = useState<QuizResults>({
@@ -138,10 +139,19 @@ function App({
         <Suspense fallback={<LoadingSpinner />}>
           {view === "home" && (
             <HomeView
-              onStart={() => setView("quiz")}
+              onStart={() => {
+                if (quizId) {
+                  setView("quiz");
+                } else {
+                  // Показываем сообщение, что нужно перейти по ссылке квиза
+                  // QuizView сам покажет сообщение, если quizId отсутствует
+                  setView("quiz");
+                }
+              }}
               onAdmin={() => setView("admin")}
               onCreate={() => setView("create")}
               isAdmin={isAdmin}
+              hasQuizId={Boolean(quizId)}
             />
           )}
           {view === "quiz" && (
@@ -160,11 +170,22 @@ function App({
           {view === "admin" && isAdmin && (
             <AdminDashboard
               onExit={() => setView("home")}
-              onCreateQuiz={() => setView("create")}
+              onCreateQuiz={(id) => {
+                setEditQuizId(id ?? null);
+                setView("create");
+              }}
               quizId={quizId}
             />
           )}
-          {view === "create" && isAdmin && <CreateQuizView onExit={() => setView("home")} />}
+          {view === "create" && isAdmin && (
+            <CreateQuizView
+              quizId={editQuizId}
+              onExit={() => {
+                setEditQuizId(null);
+                setView("home");
+              }}
+            />
+          )}
         </Suspense>
       </div>
     </ToastProvider>
