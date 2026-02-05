@@ -414,17 +414,9 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
   }
 
   return (
-    <div className="admin-shell min-h-screen bg-background text-foreground flex flex-col md:flex-row overflow-x-hidden">
-      <div
-        className={cn(
-          "w-full md:w-64 flex flex-row md:flex-col items-center md:items-start gap-2 md:gap-8 fixed md:static bottom-0 md:top-0 left-0 right-0 z-30 transition-transform duration-200",
-          "md:translate-y-0",
-          "md:fx-backdrop md:border-r md:border-white/10 md:p-6 md:bg-black/20 md:backdrop-blur-md",
-          "pb-[max(env(safe-area-inset-bottom),12px)] pt-3 px-3 md:pb-0 md:pt-0 md:px-0",
-          "backdrop-blur-xl bg-white/10 dark:bg-black/25 border-t border-white/20 shadow-[0_-8px_32px_rgba(0,0,0,0.12)] dark:shadow-[0_-8px_32px_rgba(0,0,0,0.4)]",
-        )}
-      >
-        <div className="hidden md:flex items-center gap-3 shrink-0">
+    <div className="admin-shell min-h-screen bg-background text-foreground flex overflow-x-hidden">
+      <div className="fx-backdrop w-20 md:w-64 border-r border-white/10 flex flex-col items-center md:items-start p-6 gap-8 bg-black/20 backdrop-blur-md">
+        <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-2xl bg-primary flex items-center justify-center font-black shadow-lg shadow-primary/20">
             S
           </div>
@@ -433,7 +425,7 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
           </span>
         </div>
 
-        <nav className="w-full flex md:flex-1 md:flex-col gap-2 md:space-y-2 overflow-x-auto md:overflow-visible">
+        <nav className="flex-1 w-full space-y-2">
           {[
             { id: "dashboard", icon: LayoutDashboard, label: "Дашборд" },
             { id: "quizzes", icon: List, label: "Квизы" },
@@ -448,13 +440,13 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
                 setActiveTab(item.id);
               }}
               className={cn(
-                "min-h-[52px] min-w-[52px] md:min-h-0 md:min-w-0 flex items-center justify-center md:justify-start gap-3 md:gap-4 py-3 px-4 md:p-4 rounded-2xl transition-all group relative overflow-hidden flex-1 md:flex-none",
+                "w-full flex items-center gap-4 p-4 rounded-2xl transition-all group relative overflow-hidden",
                 activeTab === item.id
                   ? "bg-primary text-white shadow-lg shadow-primary/20"
-                  : "bg-white/10 dark:bg-white/5 text-white/70 hover:bg-white/20 dark:hover:bg-white/10 hover:text-foreground dark:hover:text-white border border-white/10",
+                  : "hover:bg-black/5 dark:hover:bg-white/5 text-white/50 hover:text-foreground dark:hover:text-white",
               )}
             >
-              <item.icon className="shrink-0 md:w-5 md:h-5 w-6 h-6" size={24} />
+              <item.icon size={20} />
               <span className="font-bold hidden md:block">{item.label}</span>
               {item.id === "live" && (
                 <span className="absolute right-4 top-1/2 -translate-y-1/2 w-2 h-2 bg-red-500 rounded-full animate-ping hidden md:block" />
@@ -468,14 +460,14 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
             hapticSelection();
             onExit();
           }}
-          className="min-h-[52px] min-w-[52px] md:min-h-0 md:min-w-0 flex items-center justify-center md:justify-start gap-3 md:gap-4 py-3 px-4 md:p-4 rounded-2xl text-red-500 hover:bg-red-500/15 dark:hover:bg-red-500/10 transition-all flex-1 md:flex-none bg-white/10 dark:bg-white/5 border border-white/10 hover:border-red-500/30"
+          className="w-full flex items-center gap-4 p-4 rounded-2xl text-red-500 hover:bg-red-500/10 transition-all"
         >
-          <LogOut className="shrink-0 md:w-5 md:h-5 w-6 h-6" size={24} />
+          <LogOut size={20} />
           <span className="font-bold hidden md:block">Выйти</span>
         </button>
       </div>
 
-      <div className="flex-1 flex flex-col overflow-hidden pb-20 md:pb-0">
+      <div className="flex-1 flex flex-col overflow-hidden">
         <header className="h-16 sm:h-20 md:h-24 border-b border-white/10 px-4 sm:px-6 md:px-8 flex flex-col sm:flex-row sm:items-center items-start justify-between gap-3 backdrop-blur-md bg-black/50">
           <div className="space-y-1">
             <h2 className="text-xl sm:text-2xl font-black">

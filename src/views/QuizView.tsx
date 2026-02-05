@@ -52,12 +52,14 @@ const QuizView = ({ quizId, onFinish, openedFromStartParam }: QuizViewProps) => 
   const [expired, setExpired] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [timedOut, setTimedOut] = useState(false);
+  const [showQuestionFade, setShowQuestionFade] = useState(false);
   const currentQRef = useRef(0);
   const isActiveRef = useRef(true);
   const lastSocketToastRef = useRef<string | null>(null);
   const autoSkipTimerRef = useRef<number | null>(null);
   const answerTimeoutRef = useRef<number | null>(null);
   const completingRef = useRef(false);
+  const questionScrollRef = useRef<HTMLHeadingElement | null>(null);
   const { pushToast } = useToast();
 
   useEffect(() => {
@@ -406,6 +408,34 @@ const QuizView = ({ quizId, onFinish, openedFromStartParam }: QuizViewProps) => 
   const isSubscriptionGate = Boolean(
     question?.requiresSubscription && question.options.length === 0,
   );
+
+  const updateQuestionFade = React.useCallback(() => {
+    const el = questionScrollRef.current;
+    if (!el) {
+      setShowQuestionFade(false);
+      return;
+    }
+    const hasOverflow = el.scrollHeight > el.clientHeight + 1;
+    if (!hasOverflow) {
+      setShowQuestionFade(false);
+      return;
+    }
+    const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 1;
+    setShowQuestionFade(!atBottom);
+  }, []);
+
+  useEffect(() => {
+    const el = questionScrollRef.current;
+    if (!el) {
+      setShowQuestionFade(false);
+      return;
+    }
+    el.scrollTop = 0;
+    const raf = window.requestAnimationFrame(() => {
+      updateQuestionFade();
+    });
+    return () => window.cancelAnimationFrame(raf);
+  }, [currentQ, questionText, updateQuestionFade]);
   useEffect(() => {
     currentQRef.current = currentQ;
   }, [currentQ]);
@@ -781,6 +811,8 @@ const QuizView = ({ quizId, onFinish, openedFromStartParam }: QuizViewProps) => 
               )}
               <div className="relative">
                 <h2
+                  ref={questionScrollRef}
+                  onScroll={updateQuestionFade}
                   className={cn(
                     questionSizeClass,
                     questionLeadingClass,
@@ -789,7 +821,9 @@ const QuizView = ({ quizId, onFinish, openedFromStartParam }: QuizViewProps) => 
                 >
                   {question.question}
                 </h2>
-                <div className="pointer-events-none absolute bottom-0 left-0 right-2 h-6 bg-gradient-to-t from-background/80 to-transparent md:hidden" />
+                {showQuestionFade && (
+                  <div className="pointer-events-none absolute bottom-0 left-0 right-2 h-6 bg-gradient-to-t from-background/60 to-transparent md:hidden" />
+                )}
               </div>
             </div>
 
