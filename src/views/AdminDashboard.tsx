@@ -10,6 +10,7 @@ import {
   LayoutDashboard,
   List,
   LogOut,
+  Menu,
   Pencil,
   PieChart,
   Play,
@@ -22,6 +23,7 @@ import {
   Trophy,
   Trash2,
   Users,
+  X,
   XCircle,
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
@@ -90,6 +92,7 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
   const [adminToken, setAdminToken] = useState("");
   const [adminTokenInput, setAdminTokenInput] = useState("");
   const [adminAuthError, setAdminAuthError] = useState<string | null>(null);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const { pushToast } = useToast();
 
   const adminCurrentQuestion = adminQuiz?.questions[adminActiveQuestionIndex];
@@ -414,18 +417,45 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
   }
 
   return (
-    <div className="admin-shell min-h-screen bg-background text-foreground flex overflow-x-hidden">
-      <div className="fx-backdrop w-20 md:w-64 border-r border-white/10 flex flex-col items-center md:items-start p-6 gap-8 bg-black/20 backdrop-blur-md">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-primary flex items-center justify-center font-black shadow-lg shadow-primary/20">
-            S
+    <div className="admin-shell min-h-screen bg-background text-foreground flex overflow-x-hidden relative">
+      {/* Mobile Sidebar Overlay */}
+      <AnimatePresence>
+        {isMobileMenuOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setIsMobileMenuOpen(false)}
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] md:hidden"
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Sidebar (Desktop & Mobile) */}
+      <div
+        className={cn(
+          "fx-backdrop fixed md:relative inset-y-0 left-0 z-[101] w-72 md:w-64 border-r border-white/10 flex flex-col p-6 gap-8 bg-black/90 md:bg-black/20 backdrop-blur-xl transition-transform duration-300 md:translate-x-0",
+          isMobileMenuOpen ? "translate-x-0" : "-translate-x-full",
+        )}
+      >
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-primary flex items-center justify-center font-black shadow-lg shadow-primary/20">
+              S
+            </div>
+            <span className="font-black text-xl">
+              SUPER<span className="text-primary">ADMIN</span>
+            </span>
           </div>
-          <span className="font-black text-xl hidden md:block">
-            SUPER<span className="text-primary">ADMIN</span>
-          </span>
+          <button
+            onClick={() => setIsMobileMenuOpen(false)}
+            className="p-2 md:hidden text-white/50 hover:text-white"
+          >
+            <X size={24} />
+          </button>
         </div>
 
-        <nav className="flex-1 w-full space-y-2">
+        <nav className="flex-1 w-full space-y-2 overflow-y-auto custom-scrollbar">
           {[
             { id: "dashboard", icon: LayoutDashboard, label: "Дашборд" },
             { id: "quizzes", icon: List, label: "Квизы" },
@@ -438,18 +468,19 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
               onClick={() => {
                 hapticSelection();
                 setActiveTab(item.id);
+                setIsMobileMenuOpen(false);
               }}
               className={cn(
                 "w-full flex items-center gap-4 p-4 rounded-2xl transition-all group relative overflow-hidden",
                 activeTab === item.id
                   ? "bg-primary text-white shadow-lg shadow-primary/20"
-                  : "hover:bg-black/5 dark:hover:bg-white/5 text-white/50 hover:text-foreground dark:hover:text-white",
+                  : "hover:bg-white/5 text-white/50 hover:text-white",
               )}
             >
               <item.icon size={20} />
-              <span className="font-bold hidden md:block">{item.label}</span>
+              <span className="font-bold">{item.label}</span>
               {item.id === "live" && (
-                <span className="absolute right-4 top-1/2 -translate-y-1/2 w-2 h-2 bg-red-500 rounded-full animate-ping hidden md:block" />
+                <span className="absolute right-4 top-1/2 -translate-y-1/2 w-2 h-2 bg-red-500 rounded-full animate-ping" />
               )}
             </button>
           ))}
@@ -463,31 +494,43 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
           className="w-full flex items-center gap-4 p-4 rounded-2xl text-red-500 hover:bg-red-500/10 transition-all"
         >
           <LogOut size={20} />
-          <span className="font-bold hidden md:block">Выйти</span>
+          <span className="font-bold">Выйти</span>
         </button>
       </div>
 
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <header className="h-16 sm:h-20 md:h-24 border-b border-white/10 px-4 sm:px-6 md:px-8 flex flex-col sm:flex-row sm:items-center items-start justify-between gap-3 backdrop-blur-md bg-black/50">
-          <div className="space-y-1">
-            <h2 className="text-xl sm:text-2xl font-black">
-              {activeTab === "dashboard" && "Обзор системы"}
-              {activeTab === "live" && "Live Мониторинг"}
-              {activeTab === "quizzes" && "Управление квизами"}
-            </h2>
-            <p className="text-[10px] sm:text-xs font-bold text-white/30 uppercase tracking-widest">
-              {formattedDate}
-            </p>
+      <div className="flex-1 flex flex-col min-w-0">
+        <header className="h-16 md:h-24 border-b border-white/10 px-4 md:px-8 flex items-center justify-between backdrop-blur-md bg-black/50 sticky top-0 z-50">
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => {
+                hapticSelection();
+                setIsMobileMenuOpen(true);
+              }}
+              className="p-2 md:hidden text-white/70 hover:text-white bg-white/5 rounded-xl"
+            >
+              <Menu size={24} />
+            </button>
+            <div className="space-y-0.5">
+              <h2 className="text-lg md:text-2xl font-black truncate max-w-[150px] sm:max-w-none">
+                {activeTab === "dashboard" && "Обзор"}
+                {activeTab === "live" && "Live"}
+                {activeTab === "quizzes" && "Квизы"}
+              </h2>
+              <p className="text-[10px] font-bold text-white/30 uppercase tracking-widest hidden sm:block">
+                {formattedDate}
+              </p>
+            </div>
           </div>
-          <div className="flex items-center gap-4 sm:gap-6">
+
+          <div className="flex items-center gap-3 md:gap-6">
             <div className="hidden sm:flex flex-col items-end">
-              <span className="text-sm font-bold">Администратор</span>
-              <span className="text-xs text-primary font-bold uppercase tracking-widest">
+              <span className="text-sm font-bold">Admin</span>
+              <span className="text-[10px] text-primary font-bold uppercase tracking-widest">
                 Online
               </span>
             </div>
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-primary to-purple-600 border-2 border-white/10 p-0.5">
-              <div className="w-full h-full rounded-[0.9rem] bg-black overflow-hidden">
+            <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl md:rounded-2xl bg-gradient-to-br from-primary to-purple-600 border border-white/10 p-0.5">
+              <div className="w-full h-full rounded-[0.6rem] md:rounded-[0.9rem] bg-black overflow-hidden">
                 <img
                   src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix"
                   alt="avatar"
@@ -497,7 +540,7 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
           </div>
         </header>
 
-        <main className="flex-1 overflow-auto p-4 sm:p-6 md:p-8 space-y-4 sm:space-y-6 md:space-y-8">
+        <main className="flex-1 overflow-x-hidden overflow-y-auto p-4 md:p-8 space-y-6 md:space-y-8">
           <div className="p-4 sm:p-6 rounded-2xl sm:rounded-[2rem] bg-white/5 border border-white/10 space-y-4">
             <div className="text-xs font-black uppercase tracking-widest text-white/40">
               Квиз
@@ -573,23 +616,23 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
                 exit={{ opacity: 0, y: -20 }}
                 className="space-y-8"
               >
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6">
                   {[
                     {
-                      label: "Всего игр",
+                      label: "Игр",
                       val: dashboardStats?.totalGames ?? "—",
                       icon: Play,
                       color: "text-blue-400",
                     },
                     {
-                      label: "Активных квизов",
+                      label: "Квизов",
                       val: dashboardStats?.activeQuizzes ?? "—",
                       icon: Activity,
                       color: "text-green-400",
                       live: true,
                     },
                     {
-                      label: "Игроков всего",
+                      label: "Игроков",
                       val: dashboardStats?.totalPlayers ?? "—",
                       icon: Users,
                       color: "text-purple-400",
@@ -599,52 +642,52 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
                   ].map((stat, i) => (
                     <div
                       key={i}
-                      className="p-6 rounded-[2rem] bg-white/5 border border-white/10 hover:border-primary/30 transition-all group relative overflow-hidden"
+                      className="p-4 md:p-6 rounded-2xl md:rounded-[2rem] bg-white/5 border border-white/10 hover:border-primary/30 transition-all group relative overflow-hidden"
                     >
                       <div
                         className={cn(
-                          "p-4 rounded-2xl bg-white/5 w-fit mb-4 group-hover:scale-110 transition-transform",
+                          "p-2 md:p-4 rounded-xl md:rounded-2xl bg-white/5 w-fit mb-2 md:mb-4 group-hover:scale-110 transition-transform",
                           stat.color,
                         )}
                       >
-                        <stat.icon size={24} />
+                        <stat.icon size={20} className="md:w-6 md:h-6" />
                       </div>
-                      <div className="text-sm font-bold text-white/50 uppercase tracking-widest mb-1">
+                      <div className="text-[10px] md:text-sm font-bold text-white/50 uppercase tracking-widest mb-1">
                         {stat.label}
                       </div>
-                      <div className="text-3xl font-black">{stat.val}</div>
+                      <div className="text-xl md:text-3xl font-black">{stat.val}</div>
                       {stat.live && (
-                        <div className="absolute top-6 right-6 flex h-2 w-2">
+                        <div className="absolute top-4 right-4 md:top-6 md:right-6 flex h-1.5 w-1.5 md:h-2 md:w-2">
                           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
-                          <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
+                          <span className="relative inline-flex rounded-full h-1.5 w-1.5 md:h-2 md:w-2 bg-green-500" />
                         </div>
                       )}
                     </div>
                   ))}
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                  <div className="lg:col-span-2 p-8 rounded-[2.5rem] bg-white/5 border border-white/10">
-                    <div className="flex justify-between items-center mb-8">
-                      <h3 className="text-xl font-black">Активность за 24ч</h3>
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8">
+                  <div className="lg:col-span-2 p-6 md:p-8 rounded-2xl md:rounded-[2.5rem] bg-white/5 border border-white/10">
+                    <div className="flex justify-between items-center mb-6 md:mb-8">
+                      <h3 className="text-lg md:text-xl font-black">Активность</h3>
                       <div className="flex gap-2">
-                        <div className="px-3 py-1 rounded-lg bg-primary/20 text-primary text-xs font-bold">
+                        <div className="px-2 py-1 rounded-lg bg-primary/20 text-primary text-[10px] font-bold">
                           Users
                         </div>
-                        <div className="px-3 py-1 rounded-lg bg-white/5 text-white/50 text-xs font-bold">
+                        <div className="px-2 py-1 rounded-lg bg-white/5 text-white/50 text-[10px] font-bold">
                           Games
                         </div>
                       </div>
                     </div>
-                    <div className="h-64 flex items-center justify-center text-xs font-bold uppercase tracking-widest text-white/30">
+                    <div className="h-48 md:h-64 flex items-center justify-center text-[10px] font-bold uppercase tracking-widest text-white/30 text-center">
                       {/* TODO: implement activity chart data */}
-                      Нет данных
+                      График активности<br/>скоро появится
                     </div>
                   </div>
 
-                  <div className="p-8 rounded-[2.5rem] bg-white/5 border border-white/10 flex flex-col">
-                    <h3 className="text-xl font-black mb-6">Топ квизов</h3>
-                    <div className="space-y-4 flex-1">
+                  <div className="p-6 md:p-8 rounded-2xl md:rounded-[2.5rem] bg-white/5 border border-white/10 flex flex-col">
+                    <h3 className="text-lg md:text-xl font-black mb-6">Топ квизов</h3>
+                    <div className="space-y-3 flex-1">
                       {dashboardLoading && (
                         <div className="p-4 rounded-2xl bg-white/5 text-xs font-bold uppercase tracking-widest text-white/30 text-center">
                           Загрузка...
@@ -655,11 +698,11 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
                           dashboardStats.topQuizzes.map((quiz, index) => (
                             <div
                               key={`${quiz.title}-${index}`}
-                              className="p-4 rounded-2xl bg-white/5 border border-white/10"
+                              className="p-3 md:p-4 rounded-xl md:rounded-2xl bg-white/5 border border-white/10"
                             >
-                              <div className="font-bold">{quiz.title}</div>
+                              <div className="font-bold text-sm md:text-base truncate">{quiz.title}</div>
                               <div className="text-[10px] font-black uppercase tracking-widest text-white/40">
-                                {quiz.plays} игр • {quiz.questionsCount} вопросов
+                                {quiz.plays} игр • {quiz.questionsCount} вопр.
                               </div>
                             </div>
                           ))
@@ -670,10 +713,11 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
                         ))}
                     </div>
                     <Button
-                      className="w-full mt-6 bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 text-foreground dark:text-white border border-black/10 dark:border-white/10"
+                      size="sm"
+                      className="w-full mt-6 bg-white/5 hover:bg-white/10 text-white border border-white/10"
                       onClick={() => {
                         hapticSelection();
-                        pushToast("Список квизов скоро", "info");
+                        setActiveTab("quizzes");
                       }}
                     >
                       Все квизы
@@ -691,10 +735,11 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
                 exit={{ opacity: 0, x: -20 }}
                 className="space-y-8"
               >
-                <div className="flex justify-between items-center">
-                  <h3 className="text-2xl font-black">Управление квизами</h3>
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                  <h3 className="text-xl md:text-2xl font-black">Управление квизами</h3>
                   <Button
-                    className="bg-primary hover:bg-primary/90"
+                    size="sm"
+                    className="w-full sm:w-auto bg-primary hover:bg-primary/90"
                     onClick={() => {
                       hapticSelection();
                       onCreateQuiz(null);
@@ -704,21 +749,22 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
                   </Button>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-6">
                   <motion.div
                     whileHover={{ scale: 1.02 }}
-                    className="p-8 rounded-[2.5rem] border-2 border-dashed border-white/10 flex flex-col items-center justify-center gap-4 hover:border-primary/50 hover:bg-primary/5 transition-all cursor-pointer group"
+                    whileTap={{ scale: 0.98 }}
+                    className="p-6 md:p-8 rounded-2xl md:rounded-[2.5rem] border-2 border-dashed border-white/10 flex flex-col items-center justify-center gap-3 md:gap-4 hover:border-primary/50 hover:bg-primary/5 transition-all cursor-pointer group"
                     onClick={() => {
                       hapticSelection();
                       onCreateQuiz(null);
                     }}
                   >
-                    <div className="p-4 rounded-2xl bg-white/5 text-white/40 group-hover:text-primary group-hover:scale-110 transition-all">
-                      <Plus size={32} />
+                    <div className="p-3 md:p-4 rounded-xl md:rounded-2xl bg-white/5 text-white/40 group-hover:text-primary group-hover:scale-110 transition-all">
+                      <Plus size={24} className="md:w-8 md:h-8" />
                     </div>
                     <div className="text-center">
-                      <div className="font-bold text-lg">Создать с нуля</div>
-                      <p className="text-sm text-white/40 font-medium">
+                      <div className="font-bold text-base md:text-lg">Создать с нуля</div>
+                      <p className="text-xs md:text-sm text-white/40 font-medium">
                         Используйте мощный конструктор
                       </p>
                     </div>
@@ -977,71 +1023,71 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
                 exit={{ opacity: 0, scale: 1.05 }}
                 className="space-y-8"
               >
-                <div className="flex flex-wrap gap-4">
-                  <div className="flex-1 min-w-[200px] p-6 rounded-3xl bg-primary/10 border border-primary/20 backdrop-blur-md flex items-center justify-between">
-                    <div>
-                      <div className="text-xs font-bold text-primary uppercase tracking-widest mb-1">
+                <div className="flex flex-col sm:flex-row gap-3 md:gap-4">
+                  <div className="flex-1 p-4 md:p-6 rounded-2xl md:rounded-3xl bg-primary/10 border border-primary/20 backdrop-blur-md flex items-center justify-between">
+                    <div className="min-w-0">
+                      <div className="text-[10px] font-bold text-primary uppercase tracking-widest mb-1">
                         Текущий квиз
                       </div>
-                      <div className="text-xl font-black">
+                      <div className="text-base md:text-xl font-black truncate">
                         {adminQuiz?.title ?? "—"}
                       </div>
                     </div>
-                    <div className="p-3 rounded-2xl bg-primary text-white">
-                      <Play size={20} />
+                    <div className="p-2 md:p-3 rounded-xl md:rounded-2xl bg-primary text-white shrink-0 ml-3">
+                      <Play size={18} className="md:w-5 md:h-5" />
                     </div>
                   </div>
-                  <div className="flex-1 min-w-[200px] p-6 rounded-3xl bg-white/5 border border-white/10 flex items-center justify-between">
+                  <div className="flex-1 p-4 md:p-6 rounded-2xl md:rounded-3xl bg-white/5 border border-white/10 flex items-center justify-between">
                     <div>
-                      <div className="text-xs font-bold text-white/40 uppercase tracking-widest mb-1">
+                      <div className="text-[10px] font-bold text-white/40 uppercase tracking-widest mb-1">
                         Участников
                       </div>
-                      <div className="text-xl font-black">
+                      <div className="text-base md:text-xl font-black">
                         {livePlayers}{" "}
-                        <span className="text-green-400 text-sm ml-2">● LIVE</span>
+                        <span className="text-green-400 text-xs ml-2 animate-pulse">● LIVE</span>
                       </div>
                     </div>
-                    <div className="p-3 rounded-2xl bg-white/5 text-white">
-                      <Users size={20} />
+                    <div className="p-2 md:p-3 rounded-xl md:rounded-2xl bg-white/5 text-white shrink-0 ml-3">
+                      <Users size={18} className="md:w-5 md:h-5" />
                     </div>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 md:gap-8">
                   <div className="lg:col-span-8 space-y-6">
-                    <div className="p-8 rounded-[2.5rem] bg-white/5 border border-white/10">
-                      <div className="flex justify-between items-center mb-8">
-                        <h3 className="text-xl font-black flex items-center gap-3">
-                          <BarChart3 className="text-primary" /> Ответы по вопросам
+                    <div className="p-6 md:p-8 rounded-2xl md:rounded-[2.5rem] bg-white/5 border border-white/10">
+                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 md:mb-8">
+                        <h3 className="text-lg md:text-xl font-black flex items-center gap-3">
+                          <BarChart3 className="text-primary" /> Ответы
                         </h3>
-                        <Badge variant="default">
+                        <Badge variant="default" className="text-[10px]">
                           Вопрос{" "}
                           {adminQuiz ? adminActiveQuestionIndex + 1 : "—"}/
                           {adminQuiz?.questions.length ?? "—"}
                         </Badge>
                       </div>
 
-                      <div className="space-y-8">
+                      <div className="space-y-6 md:space-y-8">
                         {!adminCurrentQuestion && (
-                          <div className="p-6 rounded-2xl bg-white/5 border border-white/5 text-xs font-bold uppercase tracking-widest text-white/30 text-center">
-                            Нет данных
+                          <div className="p-6 rounded-2xl bg-white/5 border border-white/5 text-[10px] font-bold uppercase tracking-widest text-white/30 text-center">
+                            Ожидание данных...
                           </div>
                         )}
                         {adminCurrentQuestion && (
-                          <div className="space-y-6">
-                            <p className="text-lg font-bold">
+                          <div className="space-y-4 md:space-y-6">
+                            <p className="text-base md:text-lg font-bold leading-tight">
                               {adminCurrentQuestion.question}
                             </p>
-                            <div className="space-y-4">
+                            <div className="space-y-3 md:space-y-4">
                               {adminCurrentQuestion.options.map((opt, i) => {
                                 const value = adminQuestionStats[i] ?? 0;
                                 return (
-                                  <div key={i} className="space-y-2">
-                                    <div className="flex justify-between text-sm font-bold">
-                                      <span className="text-white/60">{opt}</span>
-                                      <span>{value}%</span>
+                                  <div key={i} className="space-y-1.5 md:space-y-2">
+                                    <div className="flex justify-between text-xs md:text-sm font-bold">
+                                      <span className="text-white/60 truncate mr-4">{opt}</span>
+                                      <span className="shrink-0">{value}%</span>
                                     </div>
-                                    <div className="h-3 w-full bg-white/5 rounded-full overflow-hidden">
+                                    <div className="h-2 md:h-3 w-full bg-white/5 rounded-full overflow-hidden">
                                       <div
                                         className="h-full rounded-full bg-primary/70 transition-[width] duration-500"
                                         style={{ width: `${value}%` }}
@@ -1054,71 +1100,62 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
                           </div>
                         )}
 
-                        <div className="space-y-3">
-                          <div className="text-xs font-black uppercase tracking-widest text-white/40">
+                        <div className="space-y-3 pt-4 border-t border-white/5">
+                          <div className="text-[10px] font-black uppercase tracking-widest text-white/40">
                             Последние ответы
                           </div>
                           {adminAnswers.length === 0 && (
-                            <div className="p-4 rounded-2xl bg-white/5 border border-white/5 text-xs font-bold uppercase tracking-widest text-white/30 text-center">
-                              Нет данных
+                            <div className="p-4 rounded-xl bg-white/5 border border-white/5 text-[10px] font-bold uppercase tracking-widest text-white/30 text-center">
+                              Нет ответов
                             </div>
                           )}
-                          {adminAnswers.map((item, index) => (
-                            <motion.div
-                              key={`${item.playerName}-${item.timestamp}-${index}`}
-                              initial={{ opacity: 0, x: -10 }}
-                              animate={{ opacity: 1, x: 0 }}
-                              className="flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/5"
-                            >
-                              <div className="flex items-center gap-4">
-                                {item.avatarUrl ? (
-                                  <img
-                                    src={item.avatarUrl}
-                                    alt={item.playerName}
-                                    className="w-10 h-10 rounded-full object-cover"
-                                    loading="lazy"
-                                    decoding="async"
-                                  />
-                                ) : (
-                                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-purple-500" />
-                                )}
-                                <div
-                                  className={cn(
-                                    "w-10 h-10 rounded-xl flex items-center justify-center font-black text-xs",
-                                    item.isCorrect
-                                      ? "bg-green-500/20 text-green-400"
-                                      : "bg-red-500/20 text-red-400",
+                          <div className="space-y-2">
+                            {adminAnswers.map((item, index) => (
+                              <motion.div
+                                key={`${item.playerName}-${item.timestamp}-${index}`}
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                className="flex items-center justify-between p-3 md:p-4 rounded-xl md:rounded-2xl bg-white/5 border border-white/5"
+                              >
+                                <div className="flex items-center gap-3 md:gap-4 min-w-0">
+                                  {item.avatarUrl ? (
+                                    <img
+                                      src={item.avatarUrl}
+                                      alt={item.playerName}
+                                      className="w-8 h-8 md:w-10 md:h-10 rounded-full object-cover shrink-0"
+                                      loading="lazy"
+                                    />
+                                  ) : (
+                                    <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-gradient-to-br from-primary to-purple-500 shrink-0" />
                                   )}
-                                >
-                                  {String.fromCharCode(65 + item.answerIndex)}
-                                </div>
-                                <div>
-                                  <div className="font-bold text-sm">
-                                    {item.playerName}
-                                  </div>
-                                  <div className="text-[10px] font-black uppercase tracking-widest text-white/40">
-                                    Вопрос {item.questionIndex + 1}
+                                  <div className="min-w-0">
+                                    <div className="font-bold text-xs md:text-sm truncate">
+                                      {item.playerName}
+                                    </div>
+                                    <div className="text-[9px] md:text-[10px] font-black uppercase tracking-widest text-white/40">
+                                      Вопр. {item.questionIndex + 1}
+                                    </div>
                                   </div>
                                 </div>
-                              </div>
-                              <div className="text-right">
-                                <div className="text-xs font-bold opacity-40">
-                                  {item.timestamp.toLocaleTimeString([], {
-                                    hour: "2-digit",
-                                    minute: "2-digit",
-                                  })}
+                                <div className="text-right shrink-0 ml-3">
+                                  <div
+                                    className={cn(
+                                      "text-[10px] md:text-xs font-black uppercase",
+                                      item.isCorrect ? "text-green-400" : "text-red-400",
+                                    )}
+                                  >
+                                    {item.isCorrect ? `+${item.score}` : "0"}
+                                  </div>
+                                  <div className="text-[9px] font-bold opacity-30">
+                                    {item.timestamp.toLocaleTimeString([], {
+                                      hour: "2-digit",
+                                      minute: "2-digit",
+                                    })}
+                                  </div>
                                 </div>
-                                <div
-                                  className={cn(
-                                    "text-[10px] font-black uppercase",
-                                    item.isCorrect ? "text-green-400" : "text-red-400",
-                                  )}
-                                >
-                                  {item.isCorrect ? `+${item.score}` : "0"}
-                                </div>
-                              </div>
-                            </motion.div>
-                          ))}
+                              </motion.div>
+                            ))}
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -1188,51 +1225,51 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
                   </div>
 
                   <div className="lg:col-span-4">
-                    <div className="p-8 rounded-[2.5rem] bg-gradient-to-b from-white/10 to-transparent border border-white/10 sticky top-0">
-                      <h3 className="text-xl font-black mb-8 flex items-center gap-3">
+                    <div className="p-6 md:p-8 rounded-2xl md:rounded-[2.5rem] bg-gradient-to-b from-white/10 to-transparent border border-white/10 sticky top-4">
+                      <h3 className="text-lg md:text-xl font-black mb-6 md:mb-8 flex items-center gap-3">
                         <Crown className="text-yellow-500" /> Live Топ
                       </h3>
-                      <div className="space-y-4">
+                      <div className="space-y-3 md:space-y-4">
                         {adminTopPlayers.length === 0 && (
-                          <div className="p-4 rounded-2xl bg-white/5 border border-white/5 text-xs font-bold uppercase tracking-widest text-white/30 text-center">
-                            Нет данных
+                          <div className="p-4 rounded-xl bg-white/5 border border-white/5 text-[10px] font-bold uppercase tracking-widest text-white/30 text-center">
+                            Нет игроков
                           </div>
                         )}
                         {adminTopPlayers.map((player, i) => (
                           <motion.div
                             layout
                             key={`${player.name}-${player.rank}`}
-                            initial={{ opacity: 0, x: 20 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            className="flex items-center gap-4 p-4 rounded-2xl bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/5 hover:bg-black/10 dark:hover:bg-white/10 transition-all"
+                            initial={{ opacity: 0, scale: 0.9 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            className="flex items-center gap-3 md:gap-4 p-3 md:p-4 rounded-xl md:rounded-2xl bg-white/5 border border-white/5 hover:bg-white/10 transition-all"
                           >
                             <div
                               className={cn(
-                                "w-8 h-8 rounded-xl flex items-center justify-center font-black text-xs",
+                                "w-7 h-7 md:w-8 md:h-8 rounded-lg md:rounded-xl flex items-center justify-center font-black text-[10px] md:text-xs shrink-0",
                                 i === 0 ? "bg-yellow-500 text-black" : "bg-white/10",
                               )}
                             >
                               {player.rank}
                             </div>
-                            <div className="flex-1">
-                              <div className="font-bold text-sm">{player.name}</div>
-                              <div className="text-[10px] font-black text-green-400">
-                                TOP
+                            <div className="flex-1 min-w-0">
+                              <div className="font-bold text-xs md:text-sm truncate">{player.name}</div>
+                              <div className="text-[9px] font-black text-green-400 uppercase">
+                                {i === 0 ? "Leader" : "Top"}
                               </div>
                             </div>
-                            <div className="font-black text-sm">{player.score}</div>
+                            <div className="font-black text-xs md:text-sm shrink-0 ml-2">{player.score}</div>
                           </motion.div>
                         ))}
                       </div>
                       <Button
                         variant="glass"
-                        className="w-full mt-8"
+                        size="sm"
+                        className="w-full mt-6 md:mt-8"
                         onClick={() => {
-                          // TODO: implement full leaderboard view
                           pushToast("Полный список скоро", "info");
                         }}
                       >
-                        Полный список
+                        Весь список
                       </Button>
                     </div>
                   </div>

@@ -238,8 +238,23 @@ const QuizView = ({ quizId, onFinish, openedFromStartParam }: QuizViewProps) => 
       pushToast(message, variant);
     };
 
+    let disconnectToastTimer: number | null = null;
+    let shouldShowRestoreToast = false;
+
+    const clearDisconnectToast = () => {
+      if (disconnectToastTimer === null) {
+        return;
+      }
+      window.clearTimeout(disconnectToastTimer);
+      disconnectToastTimer = null;
+    };
+
     const handleConnect = () => {
-      showSocketToast("Соединение восстановлено", "success");
+      clearDisconnectToast();
+      if (shouldShowRestoreToast) {
+        showSocketToast("Соединение восстановлено", "success");
+        shouldShowRestoreToast = false;
+      }
       socket.emit("quiz:join", { quizId: quiz.id });
       refreshLeaderboard();
       api
@@ -257,21 +272,23 @@ const QuizView = ({ quizId, onFinish, openedFromStartParam }: QuizViewProps) => 
     };
 
     const handleDisconnect = () => {
-      showSocketToast(
-        "Соединение потеряно. Идет переподключение...",
-        "warning",
-      );
+      clearDisconnectToast();
+      disconnectToastTimer = window.setTimeout(() => {
+        if (socket.connected) {
+          return;
+        }
+        shouldShowRestoreToast = true;
+        showSocketToast("Соединение потеряно. Идет переподключение...", "warning");
+      }, 1200);
     };
 
     const handleConnectError = () => {
+      clearDisconnectToast();
       showSocketToast("Не удалось подключиться к серверу", "error");
     };
 
-    const handleReconnectAttempt = () => {
-      showSocketToast("Переподключение...", "warning");
-    };
-
     const handleReconnectFailed = () => {
+      clearDisconnectToast();
       showSocketToast("Не удалось восстановить соединение", "error");
     };
 
@@ -356,10 +373,10 @@ const QuizView = ({ quizId, onFinish, openedFromStartParam }: QuizViewProps) => 
     socket.on("connect", handleConnect);
     socket.on("disconnect", handleDisconnect);
     socket.on("connect_error", handleConnectError);
-    socket.io.on("reconnect_attempt", handleReconnectAttempt);
     socket.io.on("reconnect_failed", handleReconnectFailed);
 
     return () => {
+      clearDisconnectToast();
       socket.off("player:answered", handlePlayerAnswered);
       socket.off("players:answered_batch", handlePlayerAnsweredBatch);
       socket.off("stats:updated", handleStatsUpdated);
@@ -369,7 +386,6 @@ const QuizView = ({ quizId, onFinish, openedFromStartParam }: QuizViewProps) => 
       socket.off("connect", handleConnect);
       socket.off("disconnect", handleDisconnect);
       socket.off("connect_error", handleConnectError);
-      socket.io.off("reconnect_attempt", handleReconnectAttempt);
       socket.io.off("reconnect_failed", handleReconnectFailed);
       releaseSocket();
     };
