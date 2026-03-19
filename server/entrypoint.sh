@@ -19,7 +19,7 @@ while [ $attempt -lt $max_attempts ]; do
       schema_ok=1
       break
     fi
-    if echo "$migrate_out" | grep -q "P3005\|database schema is not empty"; then
+    if echo "$migrate_out" | grep -q "P3005\|P3009\|database schema is not empty\|failed migrations"; then
       echo "[entrypoint] Database already has schema (P3005), baselining..."
       if npx prisma db push 2>&1; then
         echo "[entrypoint] Schema synced via db push"
