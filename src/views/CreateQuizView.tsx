@@ -7,6 +7,7 @@ import {
   Copy,
   Eye,
   Image as ImageIcon,
+  Loader2,
   Lock,
   Plus,
   Send,
@@ -64,6 +65,7 @@ const CreateQuizView = ({ onExit, quizId: editQuizId }: CreateQuizViewProps) => 
     "medium",
   );
   const [isPublic, setIsPublic] = useState(true);
+  const [waitForAdminStart, setWaitForAdminStart] = useState(false);
   const [channelUrl, setChannelUrl] = useState("");
   const [questions, setQuestions] = useState<QuestionDraft[]>([
     createEmptyQuestion(),
@@ -77,6 +79,8 @@ const CreateQuizView = ({ onExit, quizId: editQuizId }: CreateQuizViewProps) => 
   const [isMobile, setIsMobile] = useState(false);
   const [isUploadingMedia, setIsUploadingMedia] = useState(false);
   const [mediaUploadError, setMediaUploadError] = useState<string | null>(null);
+  const [isEditLoading, setIsEditLoading] = useState(false);
+  const [isEditLoaded, setIsEditLoaded] = useState(false);
   const [draftPrompt, setDraftPrompt] = useState<{
     draft: {
       quizName: string;
@@ -84,6 +88,7 @@ const CreateQuizView = ({ onExit, quizId: editQuizId }: CreateQuizViewProps) => 
       difficulty: "easy" | "medium" | "hard";
       timePerQuestion: number;
       isPublic: boolean;
+      waitForAdminStart?: boolean;
       channelUrl?: string;
       questions: QuestionDraft[];
     };
@@ -213,6 +218,10 @@ const CreateQuizView = ({ onExit, quizId: editQuizId }: CreateQuizViewProps) => 
     if (isPublishing) {
       return;
     }
+    if (editQuizId && !isEditLoaded) {
+      pushToast("Дождитесь загрузки квиза", "warning");
+      return;
+    }
     if (validationError) {
       pushToast(validationError, "warning");
       hapticNotify("warning");
@@ -227,6 +236,7 @@ const CreateQuizView = ({ onExit, quizId: editQuizId }: CreateQuizViewProps) => 
         difficulty,
         timePerQuestion,
         isPublic,
+        waitForAdminStart,
         channelUrl: channelUrl.trim() ? channelUrl.trim() : null,
         questions: questions.map((question, index) => {
           const filteredOptions = question.options
@@ -337,6 +347,7 @@ const CreateQuizView = ({ onExit, quizId: editQuizId }: CreateQuizViewProps) => 
     setDifficulty(draft.difficulty);
     setTimePerQuestion(draft.timePerQuestion);
     setIsPublic(draft.isPublic);
+    setWaitForAdminStart(draft.waitForAdminStart ?? false);
     setChannelUrl(draft.channelUrl ?? "");
     setQuestions(
       draft.questions.map((question) => ({
@@ -370,17 +381,28 @@ const CreateQuizView = ({ onExit, quizId: editQuizId }: CreateQuizViewProps) => 
 
   useEffect(() => {
     if (!editQuizId) {
+      setIsEditLoading(false);
+      setIsEditLoaded(false);
       return;
     }
     let cancelled = false;
+    setIsEditLoading(true);
+    setIsEditLoaded(false);
     api
       .getQuiz(editQuizId)
       .then((data) => {
-        if (cancelled || !data?.quiz) {
+        if (cancelled) return;
+        if (!data?.quiz) {
+          pushToast("Квиз не найден", "error");
+          onExit();
           return;
         }
         const quiz = data.quiz;
-        setQuizName(quiz.title);
+        const rawQuestions = Array.isArray(quiz.questions) ? quiz.questions : [];
+        if (rawQuestions.length === 0) {
+          pushToast("У квиза нет вопросов для редактирования", "warning");
+        }
+        setQuizName(quiz.title ?? "");
         setCategory((quiz as { category?: string })?.category ?? "");
         setDifficulty(
           ((quiz as { difficulty?: string })?.difficulty ?? "medium") as
@@ -388,26 +410,45 @@ const CreateQuizView = ({ onExit, quizId: editQuizId }: CreateQuizViewProps) => 
             | "medium"
             | "hard",
         );
-        setTimePerQuestion(quiz.timePerQuestion ?? 15);
+        setTimePerQuestion(Number(quiz.timePerQuestion) || 15);
         setIsPublic((quiz as { isPublic?: boolean })?.isPublic ?? true);
+        setWaitForAdminStart(
+          (quiz as { waitForAdminStart?: boolean })?.waitForAdminStart ?? false,
+        );
         setChannelUrl((quiz as { channelUrl?: string })?.channelUrl ?? "");
         setQuestions(
-          quiz.questions.map((q: QuizQuestion & { correctIndex?: number }) => ({
-            id: q.id ?? createQuestionId(),
-            text: q.question,
-            options: q.options.length > 0 ? q.options : [...DEFAULT_OPTIONS],
-            correctIndex: q.correctIndex ?? 0,
-            requiresSubscription: q.requiresSubscription ?? false,
-            mediaUrl: q.media?.url,
-            mediaType: q.media?.type,
-          })),
+          rawQuestions.length > 0
+            ? rawQuestions.map((q: QuizQuestion & { correctIndex?: number }) => ({
+                id: q.id ?? createQuestionId(),
+                text: q.question ?? "",
+                options: Array.isArray(q.options) && q.options.length > 0
+                  ? q.options
+                  : [...DEFAULT_OPTIONS],
+                correctIndex:
+                  typeof q.correctIndex === "number" &&
+                  q.correctIndex >= 0 &&
+                  Array.isArray(q.options) &&
+                  q.correctIndex < q.options.length
+                    ? q.correctIndex
+                    : 0,
+                requiresSubscription: q.requiresSubscription ?? false,
+                mediaUrl: q.media?.url,
+                mediaType: q.media?.type,
+              }))
+            : [createEmptyQuestion()],
         );
         setActiveQuestionIndex(0);
+        setIsEditLoaded(true);
       })
       .catch(() => {
         if (!cancelled) {
           pushToast("Не удалось загрузить квиз для редактирования", "error");
           onExit();
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsEditLoading(false);
         }
       });
     return () => {
@@ -430,6 +471,7 @@ const CreateQuizView = ({ onExit, quizId: editQuizId }: CreateQuizViewProps) => 
         difficulty?: "easy" | "medium" | "hard";
         timePerQuestion?: number;
         isPublic?: boolean;
+        waitForAdminStart?: boolean;
         channelUrl?: string;
         questions?: QuestionDraft[];
       };
@@ -441,6 +483,7 @@ const CreateQuizView = ({ onExit, quizId: editQuizId }: CreateQuizViewProps) => 
             difficulty: parsed.difficulty ?? "medium",
             timePerQuestion: parsed.timePerQuestion ?? 15,
             isPublic: parsed.isPublic ?? true,
+            waitForAdminStart: parsed.waitForAdminStart ?? false,
             channelUrl: parsed.channelUrl ?? "",
             questions: parsed.questions.map((question) => ({
               ...question,
@@ -466,6 +509,7 @@ const CreateQuizView = ({ onExit, quizId: editQuizId }: CreateQuizViewProps) => 
         difficulty,
         timePerQuestion,
         isPublic,
+        waitForAdminStart,
         channelUrl,
         questions,
       };
@@ -473,7 +517,7 @@ const CreateQuizView = ({ onExit, quizId: editQuizId }: CreateQuizViewProps) => 
     } catch {
       // ignore draft save failures
     }
-  }, [category, channelUrl, difficulty, isPublic, isPublished, questions, quizName, timePerQuestion, editQuizId]);
+  }, [category, channelUrl, difficulty, isPublic, waitForAdminStart, isPublished, questions, quizName, timePerQuestion, editQuizId]);
 
   return (
     <div className="min-h-[100dvh] w-full bg-background flex flex-col relative overflow-x-hidden">
@@ -523,6 +567,17 @@ const CreateQuizView = ({ onExit, quizId: editQuizId }: CreateQuizViewProps) => 
       </header>
 
       <main className="fx-scroll flex-1 overflow-y-auto p-4 sm:p-6 pb-28 sm:pb-6 relative z-10">
+        {editQuizId && isEditLoading && (
+          <div className="flex flex-col items-center justify-center min-h-[50vh] gap-6">
+            <Loader2 className="w-12 h-12 text-primary animate-spin" />
+            <div className="text-center space-y-1">
+              <div className="font-black text-lg">Загрузка квиза...</div>
+              <div className="text-sm text-muted-foreground font-medium">
+                Подготавливаем данные для редактирования
+              </div>
+            </div>
+          </div>
+        )}
         {draftPrompt && (
           <div className="fixed top-4 right-4 sm:top-6 sm:right-6 z-[250] max-w-sm p-4 rounded-2xl bg-primary/10 border border-primary/30 backdrop-blur-md shadow-lg space-y-3">
             <div className="text-sm font-bold text-primary">
@@ -556,6 +611,7 @@ const CreateQuizView = ({ onExit, quizId: editQuizId }: CreateQuizViewProps) => 
             </div>
           </div>
         )}
+        {(!editQuizId || !isEditLoading) && (
         <div className="max-w-2xl mx-auto space-y-6 sm:space-y-12 py-4 sm:py-8">
           <AnimatePresence mode="wait">
             {isPublished ? (
@@ -834,6 +890,34 @@ const CreateQuizView = ({ onExit, quizId: editQuizId }: CreateQuizViewProps) => 
                   </div>
 
                   <div className="space-y-3">
+                    <div
+                      className="flex items-center justify-between p-4 sm:p-5 rounded-2xl sm:rounded-[1.5rem] bg-black/5 dark:bg-white/5 border border-transparent hover:border-primary/20 transition-all group cursor-pointer"
+                      onClick={() => setWaitForAdminStart(!waitForAdminStart)}
+                    >
+                      <div className="space-y-1">
+                        <div className="font-bold text-sm group-hover:text-primary transition-colors flex items-center gap-2">
+                          Ожидать старт ведущего
+                        </div>
+                        <div className="text-[10px] text-muted-foreground font-medium">
+                          Игроки ждут, пока вы нажмёте «Старт» в Live-мониторе. Все стартуют одновременно.
+                        </div>
+                      </div>
+                      <div
+                        className={cn(
+                          "w-12 h-6 rounded-full relative transition-all p-1",
+                          waitForAdminStart
+                            ? "bg-primary"
+                            : "bg-black/20 dark:bg-white/10",
+                        )}
+                      >
+                        <div
+                          className={cn(
+                            "w-4 h-4 bg-white rounded-full transition-all shadow-sm",
+                            waitForAdminStart ? "translate-x-6" : "translate-x-0",
+                          )}
+                        />
+                      </div>
+                    </div>
                     {[
                       {
                         label: "Показывать Live-статистику",
@@ -1205,7 +1289,7 @@ const CreateQuizView = ({ onExit, quizId: editQuizId }: CreateQuizViewProps) => 
                   </Button>
                   <Button
                     onClick={handlePublish}
-                    disabled={isPublishing || Boolean(validationError)}
+                    disabled={isPublishing || Boolean(validationError) || (Boolean(editQuizId) && !isEditLoaded)}
                     className="flex-[2] py-6 sm:py-8 text-lg sm:text-xl bg-gradient-to-r from-green-500 to-emerald-600 shadow-lg shadow-green-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {isPublishing ? "Публикуем..." : "Опубликовать"}
@@ -1215,8 +1299,9 @@ const CreateQuizView = ({ onExit, quizId: editQuizId }: CreateQuizViewProps) => 
             )}
           </AnimatePresence>
         </div>
+        )}
       </main>
-      {!isPublished && (
+      {!isPublished && (!editQuizId || !isEditLoading) && (
         <div className="sm:hidden fixed bottom-0 left-0 right-0 z-30 px-4 pb-[max(env(safe-area-inset-bottom),12px)] pt-3 bg-background/90 backdrop-blur-md border-t border-black/5 dark:border-white/10">
           <div className="flex items-center gap-2">
             {step > 1 && (
@@ -1246,7 +1331,7 @@ const CreateQuizView = ({ onExit, quizId: editQuizId }: CreateQuizViewProps) => 
             {step === 3 && (
               <Button
                 onClick={handlePublish}
-                disabled={isPublishing || Boolean(validationError)}
+                disabled={isPublishing || Boolean(validationError) || (Boolean(editQuizId) && !isEditLoaded)}
                 className="flex-[2] py-4 text-base bg-gradient-to-r from-green-500 to-emerald-600 shadow-lg shadow-green-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isPublishing ? "Публикуем..." : "Опубликовать"}

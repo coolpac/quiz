@@ -28,7 +28,7 @@ const LoadingScreen: React.FC<LoadingScreenProps> = ({
         {/* Text Content */}
         <div className="text-center mb-8 space-y-2">
           <h2 className="text-2xl font-bold tracking-tight text-foreground animate-in fade-in slide-in-from-bottom-4 duration-700">
-            Квиз
+            Кибер Слон
           </h2>
           <p className="text-muted-foreground text-sm font-medium animate-in fade-in slide-in-from-bottom-2 duration-1000 delay-200">
             {message}
@@ -54,7 +54,7 @@ const LoadingScreen: React.FC<LoadingScreenProps> = ({
 
       {/* Footer hint */}
       <div className="absolute bottom-12 text-[10px] font-medium text-muted-foreground/40 uppercase tracking-[0.2em]">
-        Powered by Telegram Quiz App
+        Кибер Слон
       </div>
     </div>
   );

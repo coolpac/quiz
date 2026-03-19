@@ -44,7 +44,7 @@ on_error() {
   if [[ "${STAGE:-}" == "remote" ]]; then
     log "Fetching remote logs..."
     ssh "${SSH_OPTS[@]}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
-      "cd '${DEPLOY_PATH}' && docker compose -f ${COMPOSE_FILE} ps 2>&1; echo '---'; docker compose -f ${COMPOSE_FILE} logs --tail=50 2>&1" || true
+      "cd '${DEPLOY_PATH}' && docker compose -f ${COMPOSE_FILE} ps 2>&1; echo '---API LOGS---'; docker compose -f ${COMPOSE_FILE} logs api --tail=100 2>&1; echo '---ALL LOGS---'; docker compose -f ${COMPOSE_FILE} logs --tail=50 2>&1" || true
   fi
 }
 trap on_error ERR

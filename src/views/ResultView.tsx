@@ -46,10 +46,12 @@ const LeaderboardItem = React.memo(({ player, isMe }: LeaderboardItemProps) => (
         {player.name}
       </div>
       <div className="text-[8px] md:text-[10px] font-bold uppercase opacity-40">
-        Top Player
+        {player.inProgress ? "В процессе" : "Top Player"}
       </div>
     </div>
-    <div className="font-black text-xs md:text-sm">{player.score}</div>
+    <div className="font-black text-xs md:text-sm">
+      {player.inProgress ? `${player.score}…` : player.score}
+    </div>
   </div>
 ));
 

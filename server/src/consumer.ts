@@ -32,7 +32,13 @@ const processStream = async (streamKey: string) => {
   let processed = 0;
   while (entries.length > 0) {
     const answers = parseAnswerMessages(entries);
-    await writeAnswers(answers);
+    try {
+      await writeAnswers(answers);
+    } catch (err) {
+      console.error("[consumer] writeAnswers failed, will retry", err);
+      await sleep(2000);
+      continue;
+    }
     await deleteStreamEntries(
       streamKey,
       entries.map((entry) => entry.id),

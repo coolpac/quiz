@@ -7,19 +7,21 @@ datasource db {
 }
 
 model Quiz {
-  id              String       @id @default(cuid())
-  title           String
-  category        String
-  difficulty      String       @default("medium")
-  timePerQuestion Int          @default(15)
-  isPublic        Boolean      @default(true)
-  channelUrl      String?
-  adminToken      String       @default(cuid())
-  creatorId       String?
-  creator         Visitor?     @relation(fields: [creatorId], references: [id])
-  createdAt       DateTime     @default(now())
-  expiresAt       DateTime
-  isActive        Boolean      @default(true)
+  id                  String       @id @default(cuid())
+  title               String
+  category            String
+  difficulty          String       @default("medium")
+  timePerQuestion     Int          @default(15)
+  isPublic            Boolean      @default(true)
+  channelUrl          String?
+  adminToken          String       @default(cuid())
+  creatorId           String?
+  creator             Visitor?     @relation(fields: [creatorId], references: [id])
+  createdAt           DateTime     @default(now())
+  expiresAt           DateTime
+  isActive            Boolean      @default(true)
+  waitForAdminStart   Boolean      @default(false)
+  startedByAdminAt   DateTime?
   questions       Question[]
   attempts        QuizAttempt[]
   answers         Answer[]

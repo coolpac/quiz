@@ -2,6 +2,7 @@ export type QuizQuestion = {
   id: string;
   question: string;
   options: string[];
+  correctIndex?: number;
   media?: { type: "image" | "video"; url: string };
   requiresSubscription?: boolean;
   channelUrl?: string;
@@ -11,6 +12,8 @@ export type QuizData = {
   id: string;
   title: string;
   timePerQuestion: number;
+  waitForAdminStart?: boolean;
+  canStart?: boolean;
   questions: QuizQuestion[];
 };
 
@@ -29,6 +32,7 @@ export type LeaderboardPlayer = {
   name: string;
   score: number;
   rank: number;
+  inProgress?: boolean;
 };
 
 export type LiveFeedItem = {

@@ -40,9 +40,20 @@ export const getRedisClient = async () => {
   }
   if (!initPromise) {
     initPromise = (async () => {
-      redis = createClient({ url: redisUrl });
+      redis = createClient({
+        url: redisUrl,
+        socket: {
+          reconnectStrategy: (retries) => {
+            if (retries > 20) return new Error("Redis: too many reconnect attempts");
+            return Math.min(retries * 100, 3000);
+          },
+        },
+      });
       redis.on("error", (error) => {
         console.error("[redis] error", error);
+      });
+      redis.on("reconnecting", () => {
+        console.warn("[redis] reconnecting");
       });
       await redis.connect();
     })();

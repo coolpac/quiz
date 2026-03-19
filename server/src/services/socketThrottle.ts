@@ -1,6 +1,6 @@
 import { adminRoom, emitPlayersCount, getIO, quizRoom } from "../socketState";
 import { getLeaderboardUpdate } from "./leaderboard";
-import { getStats } from "./statsCache";
+import { getStats, getTotalAnswers } from "./statsCache";
 
 type PlayerAnsweredEvent = {
   playerName: string;
@@ -12,6 +12,9 @@ type PlayerAnsweredEvent = {
 
 const dirtyStats = new Map<string, Set<number>>();
 const answerBuffer = new Map<string, PlayerAnsweredEvent[]>();
+const ANSWER_BUFFER_MAX_PER_QUIZ = Number(
+  process.env.SOCKET_ANSWER_BUFFER_MAX ?? 300,
+);
 const leaderboardDirty = new Set<string>();
 const leaderboardVisitor = new Map<string, string>();
 const countDirty = new Set<string>();
@@ -36,14 +39,10 @@ const flushStats = () => {
   entries.forEach(([quizId, questionSet]) => {
     questionSet.forEach((questionIndex) => {
       const stats = getStats(quizId, questionIndex);
-      io.to(quizRoom(quizId)).emit("stats:updated", {
-        questionIndex,
-        stats,
-      });
-      io.to(adminRoom(quizId)).emit("stats:updated", {
-        questionIndex,
-        stats,
-      });
+      const totalAnswers = getTotalAnswers(quizId, questionIndex);
+      const payload = { questionIndex, stats, totalAnswers };
+      io.to(quizRoom(quizId)).emit("stats:updated", payload);
+      io.to(adminRoom(quizId)).emit("stats:updated", payload);
     });
   });
 };
@@ -74,15 +73,15 @@ const flushLeaderboard = async () => {
   const quizIds = Array.from(leaderboardDirty.values());
   leaderboardDirty.clear();
 
-  for (const quizId of quizIds) {
-    const visitorId = leaderboardVisitor.get(quizId);
-    if (!visitorId) {
-      continue;
-    }
-    const leaderboard = await getLeaderboardUpdate(quizId, visitorId);
-    io.to(quizRoom(quizId)).emit("leaderboard:updated", leaderboard);
-    io.to(adminRoom(quizId)).emit("leaderboard:updated", leaderboard);
-  }
+  await Promise.all(
+    quizIds.map(async (quizId) => {
+      const visitorId = leaderboardVisitor.get(quizId);
+      if (!visitorId) return;
+      const leaderboard = await getLeaderboardUpdate(quizId, visitorId);
+      io.to(quizRoom(quizId)).emit("leaderboard:updated", leaderboard);
+      io.to(adminRoom(quizId)).emit("leaderboard:updated", leaderboard);
+    }),
+  );
 };
 
 const flushPlayersCount = () => {
@@ -111,6 +110,9 @@ export const markStatsDirty = (quizId: string, questionIndex: number) => {
 
 export const queuePlayerAnswered = (quizId: string, payload: PlayerAnsweredEvent) => {
   const existing = answerBuffer.get(quizId) ?? [];
+  if (existing.length >= ANSWER_BUFFER_MAX_PER_QUIZ) {
+    existing.shift();
+  }
   existing.push(payload);
   answerBuffer.set(quizId, existing);
 };

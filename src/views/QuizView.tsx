@@ -3,10 +3,12 @@ import { motion } from "framer-motion";
 import {
   Activity,
   ExternalLink,
+  Loader2,
   RotateCcw,
   ShieldCheck,
   Timer,
   Trophy,
+  Users,
   XCircle,
 } from "lucide-react";
 import { closeMiniApp } from "@telegram-apps/sdk";
@@ -50,6 +52,7 @@ const QuizView = ({ quizId, onFinish, openedFromStartParam }: QuizViewProps) => 
   const [isFirstAttempt, setIsFirstAttempt] = useState(true);
   const [loading, setLoading] = useState(true);
   const [expired, setExpired] = useState(false);
+  const [canStart, setCanStart] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [timedOut, setTimedOut] = useState(false);
   const [showQuestionFade, setShowQuestionFade] = useState(false);
@@ -96,6 +99,7 @@ const QuizView = ({ quizId, onFinish, openedFromStartParam }: QuizViewProps) => 
       }
 
       setQuiz(data.quiz);
+      setCanStart((data.quiz as { canStart?: boolean })?.canStart !== false);
       setIsFirstAttempt(Boolean(data.isFirstAttempt));
       setCurrentQ(0);
       setSelected(null);
@@ -141,7 +145,7 @@ const QuizView = ({ quizId, onFinish, openedFromStartParam }: QuizViewProps) => 
   }, [refreshLeaderboard]);
 
   useEffect(() => {
-    if (!quiz?.id) {
+    if (!quiz?.id || !canStart) {
       return;
     }
     let cancelled = false;
@@ -172,7 +176,7 @@ const QuizView = ({ quizId, onFinish, openedFromStartParam }: QuizViewProps) => 
     return () => {
       cancelled = true;
     };
-  }, [quiz?.id, pushToast]);
+  }, [quiz?.id, canStart, pushToast]);
 
   const completeAndFinish = React.useCallback(
     async (finalScore: number, finalCorrectCount: number) => {
@@ -368,7 +372,12 @@ const QuizView = ({ quizId, onFinish, openedFromStartParam }: QuizViewProps) => 
     socket.on("players:answered_batch", handlePlayerAnsweredBatch);
     socket.on("stats:updated", handleStatsUpdated);
     socket.on("leaderboard:updated", handleLeaderboardUpdated);
+    const handleQuizStarted = () => {
+      setCanStart(true);
+    };
+
     socket.on("players:count", handlePlayersCount);
+    socket.on("quiz:started", handleQuizStarted);
     socket.on("quiz:expired", handleQuizExpired);
     socket.on("connect", handleConnect);
     socket.on("disconnect", handleDisconnect);
@@ -382,6 +391,7 @@ const QuizView = ({ quizId, onFinish, openedFromStartParam }: QuizViewProps) => 
       socket.off("stats:updated", handleStatsUpdated);
       socket.off("leaderboard:updated", handleLeaderboardUpdated);
       socket.off("players:count", handlePlayersCount);
+      socket.off("quiz:started", handleQuizStarted);
       socket.off("quiz:expired", handleQuizExpired);
       socket.off("connect", handleConnect);
       socket.off("disconnect", handleDisconnect);
@@ -455,14 +465,16 @@ const QuizView = ({ quizId, onFinish, openedFromStartParam }: QuizViewProps) => 
   useEffect(() => {
     currentQRef.current = currentQ;
   }, [currentQ]);
+  const effectiveTotal = Math.max(
+    rankInfo?.totalPlayers ?? 0,
+    playersCount ?? 0,
+  );
   const rankProgress =
-    rankInfo && rankInfo.totalPlayers > 0
+    rankInfo && effectiveTotal > 0
       ? Math.max(
           5,
           Math.round(
-            ((rankInfo.totalPlayers - rankInfo.rank + 1) /
-              rankInfo.totalPlayers) *
-              100,
+            ((effectiveTotal - rankInfo.rank + 1) / effectiveTotal) * 100,
           ),
         )
       : 0;
@@ -771,6 +783,60 @@ const QuizView = ({ quizId, onFinish, openedFromStartParam }: QuizViewProps) => 
     );
   }
 
+  if (quiz && !canStart) {
+    const effectivePlayers = Math.max(playersCount ?? 0, rankInfo?.totalPlayers ?? 0);
+    return (
+      <div className="min-h-[100dvh] w-full flex items-center justify-center p-6 bg-background overflow-hidden relative">
+        <div className="absolute inset-0 fx-blob bg-primary/5 blur-[100px] pointer-events-none" />
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+          className="relative w-full max-w-md p-8 md:p-12 rounded-[2.5rem] bg-card/60 dark:bg-slate-900/70 border border-black/5 dark:border-white/10 backdrop-blur-xl shadow-2xl text-center space-y-8"
+        >
+          <div className="flex justify-center">
+            <motion.div
+              animate={{ scale: [1, 1.08, 1], opacity: [0.7, 1, 0.7] }}
+              transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+              className="w-24 h-24 md:w-28 md:h-28 rounded-full bg-primary/15 flex items-center justify-center"
+            >
+              <Loader2 className="w-12 h-12 md:w-14 md:h-14 text-primary animate-spin" />
+            </motion.div>
+          </div>
+          <div className="space-y-3">
+            <h2 className="text-2xl md:text-3xl font-black text-foreground">
+              Ожидание ведущего
+            </h2>
+            <p className="text-sm md:text-base text-muted-foreground font-medium">
+              Ведущий скоро запустит квиз. Все участники стартуют одновременно.
+            </p>
+          </div>
+          <div className="flex items-center justify-center gap-3 p-4 rounded-2xl bg-black/5 dark:bg-white/5 border border-transparent">
+            <Users className="w-5 h-5 text-primary" />
+            <span className="text-lg font-black text-foreground">
+              {effectivePlayers > 0 ? effectivePlayers : "—"} участников
+            </span>
+          </div>
+          <div className="flex gap-2 justify-center">
+            {[0, 1, 2].map((i) => (
+              <motion.div
+                key={i}
+                className="w-2 h-2 rounded-full bg-primary/60"
+                animate={{ scale: [1, 1.3, 1], opacity: [0.5, 1, 0.5] }}
+                transition={{
+                  duration: 1.2,
+                  repeat: Infinity,
+                  delay: i * 0.2,
+                  ease: "easeInOut",
+                }}
+              />
+            ))}
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
+
   if (!quiz || !question) {
     return (
       <div className="min-h-[100dvh] w-full flex items-center justify-center p-6 bg-background">
@@ -1067,13 +1133,15 @@ const QuizView = ({ quizId, onFinish, openedFromStartParam }: QuizViewProps) => 
                   Ваш рейтинг
                 </div>
                 <div className="text-2xl font-black text-foreground">
-                  {rankInfo ? `#${rankInfo.rank}` : "—"}
+                  {effectiveTotal > 0 && rankInfo
+                    ? `#${rankInfo.rank}`
+                    : "—"}
                   <span className="text-sm opacity-40">
-                    {rankInfo ? ` из ${rankInfo.totalPlayers}` : " из —"}
+                    {effectiveTotal > 0 ? ` из ${effectiveTotal}` : " из —"}
                   </span>
                 </div>
                 <div className="text-[10px] font-bold uppercase tracking-widest opacity-40 text-foreground mt-1">
-                  Игроков в сети: {playersCount ?? "—"}
+                  Участников: {effectiveTotal > 0 ? effectiveTotal : "—"}
                 </div>
               </div>
             </div>

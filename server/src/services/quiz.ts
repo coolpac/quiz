@@ -18,6 +18,7 @@ export type CreateQuizInput = {
   timePerQuestion?: number;
   isPublic?: boolean;
   channelUrl?: string | null;
+  waitForAdminStart?: boolean;
   questions: CreateQuestionInput[];
 };
 
@@ -89,6 +90,7 @@ export const createQuiz = async (input: CreateQuizInput) => {
       timePerQuestion: input.timePerQuestion ?? 15,
       isPublic: input.isPublic ?? true,
       channelUrl: input.channelUrl ?? null,
+      waitForAdminStart: input.waitForAdminStart ?? false,
       expiresAt,
       questions: {
         create: input.questions.map((question) => {
@@ -150,6 +152,7 @@ export const updateQuiz = async (
         timePerQuestion: input.timePerQuestion ?? 15,
         isPublic: input.isPublic ?? true,
         channelUrl: input.channelUrl ?? null,
+        waitForAdminStart: input.waitForAdminStart ?? false,
         questions: {
           create: input.questions.map((question) => {
             const options = question.options

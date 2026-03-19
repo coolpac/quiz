@@ -1,11 +1,13 @@
 import { Server as HttpServer } from "http";
 import { Server } from "socket.io";
+import { createAdapter } from "@socket.io/redis-adapter";
+import { createClient } from "redis";
 import { prisma } from "./lib/prisma";
 import { ensureQuizExpiry } from "./services/quizLifecycle";
 import { markPlayersCountDirty } from "./services/socketThrottle";
 import { adminRoom, quizRoom, setIO } from "./socketState";
 
-export const initSocket = (server: HttpServer) => {
+export const initSocket = async (server: HttpServer) => {
   const appOrigins = (process.env.APP_URL ?? "")
     .split(",")
     .map((origin) => origin.trim())
@@ -16,10 +18,27 @@ export const initSocket = (server: HttpServer) => {
       : process.env.NODE_ENV === "production"
         ? false
         : true;
-  const io = new Server(server, {
-    cors: {
-      origin: appOrigin,
-    },
+
+  const redisUrl = process.env.REDIS_URL;
+  let adapter: ReturnType<typeof createAdapter> | undefined;
+
+  if (redisUrl) {
+    try {
+      const pubClient = createClient({ url: redisUrl });
+      const subClient = pubClient.duplicate();
+      pubClient.on("error", (err) => console.error("[socket] Redis pub:", err.message));
+      subClient.on("error", (err) => console.error("[socket] Redis sub:", err.message));
+      await Promise.all([pubClient.connect(), subClient.connect()]);
+      adapter = createAdapter(pubClient, subClient);
+      console.log("[socket] Redis adapter enabled (horizontal scaling ready)");
+    } catch (err) {
+      console.warn("[socket] Redis adapter init failed, using in-memory adapter:", err);
+    }
+  }
+
+  const serverOpts = {
+    ...(adapter && { adapter }),
+    cors: { origin: appOrigin },
     pingInterval: 25000,
     pingTimeout: 60000,
     transports: ["websocket", "polling"],
@@ -29,8 +48,14 @@ export const initSocket = (server: HttpServer) => {
       maxDisconnectionDuration: 2 * 60 * 1000,
       skipMiddlewares: true,
     },
-  });
+  };
+  const io = new Server(server, serverOpts as Partial<import("socket.io").ServerOptions>);
   setIO(io);
+
+  // Экономия памяти: не держим ссылку на первый HTTP request (~1–2 KB на соединение)
+  io.engine.on("connection", (rawSocket) => {
+    (rawSocket as { request?: unknown }).request = null;
+  });
 
   io.on("connection", (socket) => {
     socket.on("quiz:join", ({ quizId }: { quizId: string }) => {

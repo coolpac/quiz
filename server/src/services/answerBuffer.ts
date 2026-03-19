@@ -56,8 +56,24 @@ const flushBuffer = async () => {
   return promise;
 };
 
-export const hasBufferedAnswer = (attemptId: string, questionId: string) =>
-  bufferKeys.has(keyFor(attemptId, questionId));
+export const hasBufferedAnswer = async (
+  attemptId: string,
+  questionId: string,
+): Promise<boolean> => {
+  if (isRedisEnabled()) {
+    try {
+      const redis = await getRedisClient();
+      if (redis) {
+        const dedupeKey = dedupeKeyFor(attemptId, questionId);
+        const exists = await redis.exists(dedupeKey);
+        if (exists) return true;
+      }
+    } catch {
+      // fallback to bufferKeys
+    }
+  }
+  return bufferKeys.has(keyFor(attemptId, questionId));
+};
 
 export const enqueueAnswer = async (data: BufferedAnswer) => {
   const key = keyFor(data.attemptId, data.questionId);
@@ -66,26 +82,28 @@ export const enqueueAnswer = async (data: BufferedAnswer) => {
   }
 
   if (isRedisEnabled()) {
-    try {
-      const redis = await getRedisClient();
-      if (!redis) {
-        throw new Error("Redis not available");
-      }
-      const dedupeKey = dedupeKeyFor(data.attemptId, data.questionId);
-      const dedupe = await redis.set(dedupeKey, "1", {
-        NX: true,
-        EX: DEDUPE_TTL_SECONDS,
-      });
-      if (!dedupe) {
-        return false;
-      }
-      await addAnswerToStream(data);
-      bufferKeys.add(key);
-      return true;
-    } catch (error) {
-      console.error("[redis] failed to enqueue answer", error);
+    const redis = await getRedisClient();
+    if (!redis) {
+      const err = new Error("Redis not available");
+      console.error("[redis] failed to enqueue answer", err);
+      throw err;
+    }
+    const dedupeKey = dedupeKeyFor(data.attemptId, data.questionId);
+    const dedupe = await redis.set(dedupeKey, "1", {
+      NX: true,
+      EX: DEDUPE_TTL_SECONDS,
+    });
+    if (!dedupe) {
       return false;
     }
+    try {
+      await addAnswerToStream(data);
+    } catch (error) {
+      console.error("[redis] failed to enqueue answer", error);
+      await redis.del(dedupeKey).catch(() => {});
+      throw error;
+    }
+    return true;
   }
 
   buffer.push(data);

@@ -12,6 +12,7 @@ import healthRoutes from "./routes/health";
 import uploadRoutes from "./routes/upload";
 import { initSocket } from "./socket";
 import { telegramWebhook } from "./bot";
+import { maxWebhookRouter } from "./max-bot/route";
 import { apiLimiter } from "./middleware/rateLimit";
 import { flushNow } from "./services/answerBuffer";
 import { prisma } from "./lib/prisma";
@@ -54,13 +55,15 @@ app.use("/api/stats", statsRoutes);
 app.use("/api/health", healthRoutes);
 app.use("/api/upload", uploadRoutes);
 app.use("/webhook/telegram", telegramWebhook);
+app.use("/webhook/max", maxWebhookRouter);
 
 const server = http.createServer(app);
-initSocket(server);
-
 const port = Number(process.env.PORT) || 3001;
-server.listen(port, () => {
-  console.log(`Server is running on port ${port}`);
+
+void initSocket(server).then(() => {
+  server.listen(port, () => {
+    console.log(`Server is running on port ${port}`);
+  });
 });
 
 const shutdown = (signal: string) => {

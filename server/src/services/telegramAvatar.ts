@@ -26,6 +26,13 @@ type CacheEntry = {
 const cache = new Map<string, CacheEntry>();
 const TTL_SECONDS = Number(process.env.AVATAR_CACHE_TTL_SECONDS ?? 21600);
 const MISS_TTL_SECONDS = Number(process.env.AVATAR_MISS_TTL_SECONDS ?? 300);
+const FETCH_TIMEOUT_MS = Number(process.env.AVATAR_FETCH_TIMEOUT_MS ?? 5000);
+
+const fetchWithTimeout = (url: string) => {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  return fetch(url, { signal: controller.signal }).finally(() => clearTimeout(timeout));
+};
 
 const getCache = (key: string) => {
   const entry = cache.get(key);
@@ -63,7 +70,7 @@ export const getTelegramAvatarUrl = async (telegramId: bigint) => {
     photosUrl.searchParams.set("user_id", key);
     photosUrl.searchParams.set("limit", "1");
 
-    const photosResponse = await fetch(photosUrl.toString());
+    const photosResponse = await fetchWithTimeout(photosUrl.toString());
     if (!photosResponse.ok) {
       setCache(key, null, MISS_TTL_SECONDS);
       return null;
@@ -80,7 +87,7 @@ export const getTelegramAvatarUrl = async (telegramId: bigint) => {
     const fileUrl = new URL(`https://api.telegram.org/bot${botToken}/getFile`);
     fileUrl.searchParams.set("file_id", bestSize.file_id);
 
-    const fileResponse = await fetch(fileUrl.toString());
+    const fileResponse = await fetchWithTimeout(fileUrl.toString());
     if (!fileResponse.ok) {
       setCache(key, null, MISS_TTL_SECONDS);
       return null;
@@ -96,7 +103,17 @@ export const getTelegramAvatarUrl = async (telegramId: bigint) => {
     setCache(key, avatarUrl, TTL_SECONDS);
     return avatarUrl;
   } catch (error) {
-    console.error("[telegram] failed to fetch avatar", error);
+    const isTimeoutOrNetwork = (() => {
+      if (error instanceof Error && error.name === "AbortError") return true;
+      const c = error instanceof Error ? (error.cause as { code?: string; errors?: { code?: string }[] }) : null;
+      if (c?.code === "ETIMEDOUT" || c?.code === "ECONNRESET" || c?.code === "ENOTFOUND") return true;
+      const nested = c?.errors;
+      if (Array.isArray(nested) && nested.some((e) => e?.code === "ETIMEDOUT" || e?.code === "ECONNRESET")) return true;
+      return false;
+    })();
+    if (!isTimeoutOrNetwork) {
+      console.error("[telegram] failed to fetch avatar", error);
+    }
     setCache(key, null, MISS_TTL_SECONDS);
     return null;
   }

@@ -81,14 +81,67 @@ export const primeLeaderboardCache = async (quizId: string) => {
   });
 };
 
+type InProgressRow = {
+  visitorId: string;
+  firstName: string;
+  username: string | null;
+  score: number;
+};
+
+const getInProgressEntries = async (quizId: string) => {
+  const rows = await prisma.$queryRaw<InProgressRow[]>`
+    SELECT
+      qa."visitorId",
+      v."firstName",
+      v."username",
+      COALESCE(SUM(a.score), 0)::int as score
+    FROM "QuizAttempt" qa
+    INNER JOIN "Visitor" v ON v.id = qa."visitorId"
+    LEFT JOIN "Answer" a ON a."attemptId" = qa.id
+    WHERE qa."quizId" = ${quizId}
+      AND qa."isFirstAttempt" = true
+      AND qa."completedAt" IS NULL
+    GROUP BY qa.id, qa."visitorId", v."firstName", v."username"
+  `;
+
+  return rows.map((row) => ({
+    visitorId: row.visitorId,
+    name: row.username ? `@${row.username}` : row.firstName,
+    score: row.score,
+    completedAt: new Date(0),
+    inProgress: true as const,
+  }));
+};
+
+type LeaderboardEntryWithProgress = LeaderboardEntry & { inProgress?: boolean };
+
 const getSortedEntries = async (quizId: string) => {
   await primeLeaderboardCache(quizId);
   const leaderboard = getCache(quizId);
+  let completed = leaderboard.sorted;
   if (leaderboard.dirty) {
-    leaderboard.sorted = sortEntries(Array.from(leaderboard.byVisitor.values()));
+    leaderboard.sorted = sortEntries(
+      Array.from(leaderboard.byVisitor.values()),
+    );
     leaderboard.dirty = false;
+    completed = leaderboard.sorted;
   }
-  return leaderboard.sorted;
+
+  const inProgress = await getInProgressEntries(quizId);
+  const completedIds = new Set(completed.map((e) => e.visitorId));
+  const liveOnly = inProgress.filter((e) => !completedIds.has(e.visitorId));
+
+  const merged: LeaderboardEntryWithProgress[] = [
+    ...completed.map((e) => ({ ...e, inProgress: false })),
+    ...liveOnly,
+  ].sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    if (a.inProgress && !b.inProgress) return 1;
+    if (!a.inProgress && b.inProgress) return -1;
+    return a.completedAt.getTime() - b.completedAt.getTime();
+  });
+
+  return merged;
 };
 
 export const recordLeaderboardAttempt = (quizId: string, entry: LeaderboardEntry) => {
@@ -105,10 +158,11 @@ export const getLeaderboardUpdate = async (quizId: string, visitorId: string) =>
     ranks.set(attempt.visitorId, index + 1);
   });
 
-  const topPlayers = entries.slice(0, 10).map((attempt, index) => ({
+  const topPlayers = entries.slice(0, 15).map((attempt, index) => ({
     name: attempt.name,
     score: attempt.score,
     rank: index + 1,
+    inProgress: (attempt as LeaderboardEntryWithProgress).inProgress ?? false,
   }));
 
   const rank = ranks.get(visitorId) ?? totalPlayers + 1;
@@ -130,6 +184,7 @@ export const getLeaderboardView = async (
     name: entry.name,
     score: entry.score,
     rank: index + 1,
+    inProgress: (entry as LeaderboardEntryWithProgress).inProgress ?? false,
   }));
 
   return { players, myRank, totalPlayers };

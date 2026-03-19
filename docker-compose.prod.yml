@@ -21,7 +21,7 @@ services:
 
   redis:
     image: redis:7-alpine
-    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "128mb", "--maxmemory-policy", "allkeys-lru"]
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
     volumes:
       - redisdata:/data
     healthcheck:
@@ -41,6 +41,7 @@ services:
       context: ./server
       dockerfile: Dockerfile
     image: quiz-server:latest
+    # 768M при 100+ участниках (было 512M)
     env_file: ./server/.env
     environment:
       DATABASE_URL: postgresql://${DB_USER:-quiz}:${DB_PASSWORD}@db:5432/${DB_NAME:-quiz}
@@ -56,13 +57,13 @@ services:
       test: ["CMD-SHELL", "wget -qO- http://localhost:3001/api/health/ping || exit 1"]
       interval: 10s
       timeout: 5s
-      retries: 5
-      start_period: 30s
+      retries: 8
+      start_period: 90s
     restart: unless-stopped
     deploy:
       resources:
         limits:
-          memory: 512M
+          memory: 768M
 
   consumer:
     image: quiz-server:latest
@@ -72,6 +73,10 @@ services:
       DATABASE_URL: postgresql://${DB_USER:-quiz}:${DB_PASSWORD}@db:5432/${DB_NAME:-quiz}
       REDIS_URL: redis://redis:6379
       NODE_ENV: production
+      # Для 100+ участников: чаще опрашивать, большие батчи
+      ANSWER_STREAM_POLL_MS: "200"
+      ANSWER_STREAM_BATCH_SIZE: "1000"
+      ANSWER_BACKLOG_GROW_THRESHOLD: "1"
     depends_on:
       api:
         condition: service_healthy
@@ -79,7 +84,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 256M
+          memory: 384M
 
   web:
     build:

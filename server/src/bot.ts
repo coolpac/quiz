@@ -1,4 +1,4 @@
-import { Bot, InlineKeyboard, webhookCallback } from "grammy";
+import { Bot, GrammyError, InlineKeyboard, webhookCallback } from "grammy";
 import { prisma } from "./lib/prisma";
 
 const botToken = process.env.BOT_TOKEN;
@@ -67,6 +67,21 @@ bot.command("start", async (ctx) => {
       "Добро пожаловать в Quiz! Перейдите по ссылке квиза чтобы начать игру.",
     );
   }
+});
+
+// Тихо игнорируем, когда пользователь заблокировал бота — это нормальное поведение
+bot.catch((err) => {
+  const e = err.error;
+  if (e instanceof GrammyError) {
+    const desc = (e.description ?? "").toLowerCase();
+    if (e.error_code === 403 && desc.includes("blocked")) {
+      return; // Не логируем — пользователь сам заблокировал
+    }
+    if (e.error_code === 403 && desc.includes("user is deactivated")) {
+      return;
+    }
+  }
+  console.error("Bot error:", e);
 });
 
 export const telegramWebhook = webhookCallback(bot, "express");
