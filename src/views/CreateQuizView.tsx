@@ -31,6 +31,8 @@ type QuestionDraft = {
   requiresSubscription: boolean;
   mediaUrl?: string;
   mediaType?: "image" | "video";
+  explanation: string;
+  questionType: string;
 };
 
 const DEFAULT_OPTIONS = ["", "", "", ""];
@@ -49,6 +51,8 @@ const createEmptyQuestion = (): QuestionDraft => ({
   options: [...DEFAULT_OPTIONS],
   correctIndex: 0,
   requiresSubscription: false,
+  explanation: "",
+  questionType: "multiple_choice",
 });
 
 type CreateQuizViewProps = {
@@ -67,6 +71,12 @@ const CreateQuizView = ({ onExit, quizId: editQuizId }: CreateQuizViewProps) => 
   const [isPublic, setIsPublic] = useState(true);
   const [waitForAdminStart, setWaitForAdminStart] = useState(false);
   const [channelUrl, setChannelUrl] = useState("");
+  const [enableStreaks, setEnableStreaks] = useState(true);
+  const [enablePowerUps, setEnablePowerUps] = useState(false);
+  const [enableExplanations, setEnableExplanations] = useState(true);
+  const [enablePodium, setEnablePodium] = useState(true);
+  const [shuffleQuestions, setShuffleQuestions] = useState(false);
+  const [shuffleOptions, setShuffleOptions] = useState(false);
   const [questions, setQuestions] = useState<QuestionDraft[]>([
     createEmptyQuestion(),
   ]);
@@ -237,6 +247,12 @@ const CreateQuizView = ({ onExit, quizId: editQuizId }: CreateQuizViewProps) => 
         timePerQuestion,
         isPublic,
         waitForAdminStart,
+        enableStreaks,
+        enablePowerUps,
+        enableExplanations,
+        enablePodium,
+        shuffleQuestions,
+        shuffleOptions,
         channelUrl: channelUrl.trim() ? channelUrl.trim() : null,
         questions: questions.map((question, index) => {
           const filteredOptions = question.options
@@ -251,6 +267,8 @@ const CreateQuizView = ({ onExit, quizId: editQuizId }: CreateQuizViewProps) => 
             requiresSubscription: question.requiresSubscription,
             mediaUrl: question.mediaUrl,
             mediaType: question.mediaType,
+            explanation: question.explanation || undefined,
+            questionType: question.questionType || "multiple_choice",
             order: index,
           };
         }),
@@ -416,9 +434,15 @@ const CreateQuizView = ({ onExit, quizId: editQuizId }: CreateQuizViewProps) => 
           (quiz as { waitForAdminStart?: boolean })?.waitForAdminStart ?? false,
         );
         setChannelUrl((quiz as { channelUrl?: string })?.channelUrl ?? "");
+        setEnableStreaks((quiz as { enableStreaks?: boolean })?.enableStreaks ?? true);
+        setEnablePowerUps((quiz as { enablePowerUps?: boolean })?.enablePowerUps ?? false);
+        setEnableExplanations((quiz as { enableExplanations?: boolean })?.enableExplanations ?? true);
+        setEnablePodium((quiz as { enablePodium?: boolean })?.enablePodium ?? true);
+        setShuffleQuestions((quiz as { shuffleQuestions?: boolean })?.shuffleQuestions ?? false);
+        setShuffleOptions((quiz as { shuffleOptions?: boolean })?.shuffleOptions ?? false);
         setQuestions(
           rawQuestions.length > 0
-            ? rawQuestions.map((q: QuizQuestion & { correctIndex?: number }) => ({
+            ? rawQuestions.map((q: QuizQuestion & { correctIndex?: number; explanation?: string; questionType?: string }) => ({
                 id: q.id ?? createQuestionId(),
                 text: q.question ?? "",
                 options: Array.isArray(q.options) && q.options.length > 0
@@ -434,6 +458,8 @@ const CreateQuizView = ({ onExit, quizId: editQuizId }: CreateQuizViewProps) => 
                 requiresSubscription: q.requiresSubscription ?? false,
                 mediaUrl: q.media?.url,
                 mediaType: q.media?.type,
+                explanation: q.explanation ?? "",
+                questionType: q.questionType ?? "multiple_choice",
               }))
             : [createEmptyQuestion()],
         );
@@ -960,6 +986,29 @@ const CreateQuizView = ({ onExit, quizId: editQuizId }: CreateQuizViewProps) => 
                       </div>
                     ))}
                   </div>
+
+                  <div className="space-y-3 mt-6">
+                    <h4 className="text-xs font-bold uppercase tracking-widest text-white/40">Геймификация</h4>
+                    {[
+                      { label: "Стрики", desc: "Бонус за серию правильных ответов", value: enableStreaks, set: setEnableStreaks },
+                      { label: "Power-ups", desc: "Усиления: 2x очки, заморозка, щит", value: enablePowerUps, set: setEnablePowerUps },
+                      { label: "Объяснения", desc: "Пояснение после каждого ответа", value: enableExplanations, set: setEnableExplanations },
+                      { label: "Подиум ТОП-3", desc: "Церемония победителей в конце", value: enablePodium, set: setEnablePodium },
+                      { label: "Шаффл вопросов", desc: "Случайный порядок вопросов", value: shuffleQuestions, set: setShuffleQuestions },
+                      { label: "Шаффл ответов", desc: "Случайный порядок вариантов", value: shuffleOptions, set: setShuffleOptions },
+                    ].map((s) => (
+                      <label key={s.label} className="flex items-center justify-between p-3 rounded-xl bg-white/5 border border-white/10 cursor-pointer hover:border-white/20 transition-colors">
+                        <div>
+                          <div className="text-sm font-bold">{s.label}</div>
+                          <div className="text-[10px] text-white/40">{s.desc}</div>
+                        </div>
+                        <div className={`w-10 h-6 rounded-full transition-colors relative cursor-pointer ${s.value ? 'bg-primary' : 'bg-white/10'}`}
+                          onClick={(e) => { e.preventDefault(); s.set(!s.value); }}>
+                          <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${s.value ? 'translate-x-5' : 'translate-x-1'}`} />
+                        </div>
+                      </label>
+                    ))}
+                  </div>
                 </div>
 
                 <div className="hidden sm:flex flex-col sm:flex-row gap-3 sm:gap-4">
@@ -1219,6 +1268,25 @@ const CreateQuizView = ({ onExit, quizId: editQuizId }: CreateQuizViewProps) => 
                       </div>
                     </button>
                   </div>
+                  {enableExplanations && (
+                    <div className="mt-4">
+                      <label className="text-[10px] font-bold uppercase tracking-widest text-white/40 block mb-1">
+                        Объяснение (необязательно)
+                      </label>
+                      <textarea
+                        value={questions[activeQuestionIndex]?.explanation ?? ""}
+                        onChange={(e) =>
+                          updateActiveQuestion((draft) => ({
+                            ...draft,
+                            explanation: e.target.value,
+                          }))
+                        }
+                        placeholder="Почему этот ответ правильный..."
+                        className="w-full p-3 rounded-xl bg-white/5 border border-white/10 text-sm resize-none focus:border-primary/50 outline-none transition-colors"
+                        rows={2}
+                      />
+                    </div>
+                  )}
                   {needsChannelUrl && (
                     <div className="space-y-3 p-5 rounded-[1.5rem] bg-[#229ED9]/10 border-2 border-[#229ED9]/30">
                       <div className="flex items-center gap-2">

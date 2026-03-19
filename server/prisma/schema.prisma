@@ -21,7 +21,16 @@ model Quiz {
   expiresAt           DateTime
   isActive            Boolean      @default(true)
   waitForAdminStart   Boolean      @default(false)
-  startedByAdminAt   DateTime?
+  startedByAdminAt    DateTime?
+  enableStreaks       Boolean  @default(true)
+  enablePowerUps      Boolean  @default(false)
+  enableExplanations  Boolean  @default(true)
+  enablePodium        Boolean  @default(true)
+  shuffleQuestions    Boolean  @default(false)
+  shuffleOptions      Boolean  @default(false)
+  enableTeams         Boolean  @default(false)
+  teamCount           Int      @default(2)
+  selfPaced           Boolean  @default(false)
   questions       Question[]
   attempts        QuizAttempt[]
   answers         Answer[]
@@ -40,6 +49,8 @@ model Question {
   mediaType            String?
   requiresSubscription Boolean  @default(false)
   order                Int
+  questionType         String   @default("multiple_choice")
+  explanation          String?
   answers              Answer[]
 
   @@index([quizId, order])

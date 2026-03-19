@@ -14,6 +14,10 @@ export type QuizData = {
   timePerQuestion: number;
   waitForAdminStart?: boolean;
   canStart?: boolean;
+  enableStreaks?: boolean;
+  enablePowerUps?: boolean;
+  enableExplanations?: boolean;
+  enablePodium?: boolean;
   questions: QuizQuestion[];
 };
 
@@ -26,6 +30,18 @@ export type QuizResults = {
   /** При повторном прохождении — результат первой попытки для сравнения */
   previousCorrectCount?: number | null;
   previousTotalQuestions?: number | null;
+  answersReview?: Array<{
+    questionIndex: number;
+    questionText: string;
+    options: string[];
+    playerAnswer: number;
+    correctAnswer: number;
+    isCorrect: boolean;
+    score: number;
+    timeLeft: number;
+    explanation?: string | null;
+  }>;
+  enablePodium?: boolean;
 };
 
 export type LeaderboardPlayer = {

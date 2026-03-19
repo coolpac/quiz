@@ -259,6 +259,55 @@ const ResultView = ({ results, onRestart }: ResultViewProps) => {
                   </div>
                 )}
 
+                {results.enablePodium && leaderboard.players.length >= 3 && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 40 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.3 }}
+                    className="flex items-end justify-center gap-3 mb-8 h-48"
+                  >
+                    {/* 2nd place — left */}
+                    <div className="flex flex-col items-center">
+                      <div className="text-xs font-bold truncate max-w-[70px] text-white/70">{leaderboard.players[1]?.name}</div>
+                      <div className="text-[10px] text-white/40 font-bold">{leaderboard.players[1]?.score}</div>
+                      <motion.div
+                        initial={{ height: 0 }}
+                        animate={{ height: 100 }}
+                        transition={{ delay: 0.6, duration: 0.5 }}
+                        className="w-20 bg-gradient-to-t from-gray-500/20 to-gray-400/10 rounded-t-xl flex items-start justify-center pt-3 border-t border-x border-white/10"
+                      >
+                        <span className="text-2xl">🥈</span>
+                      </motion.div>
+                    </div>
+                    {/* 1st place — center */}
+                    <div className="flex flex-col items-center">
+                      <div className="text-sm font-black truncate max-w-[80px]">{leaderboard.players[0]?.name}</div>
+                      <div className="text-[10px] text-white/50 font-bold">{leaderboard.players[0]?.score}</div>
+                      <motion.div
+                        initial={{ height: 0 }}
+                        animate={{ height: 140 }}
+                        transition={{ delay: 0.4, duration: 0.6 }}
+                        className="w-24 bg-gradient-to-t from-yellow-500/20 to-yellow-400/10 rounded-t-xl flex items-start justify-center pt-3 border-t border-x border-yellow-500/20"
+                      >
+                        <span className="text-3xl">🥇</span>
+                      </motion.div>
+                    </div>
+                    {/* 3rd place — right */}
+                    <div className="flex flex-col items-center">
+                      <div className="text-xs font-bold truncate max-w-[70px] text-white/70">{leaderboard.players[2]?.name}</div>
+                      <div className="text-[10px] text-white/40 font-bold">{leaderboard.players[2]?.score}</div>
+                      <motion.div
+                        initial={{ height: 0 }}
+                        animate={{ height: 70 }}
+                        transition={{ delay: 0.8, duration: 0.4 }}
+                        className="w-20 bg-gradient-to-t from-orange-700/20 to-orange-600/10 rounded-t-xl flex items-start justify-center pt-3 border-t border-x border-orange-500/20"
+                      >
+                        <span className="text-2xl">🥉</span>
+                      </motion.div>
+                    </div>
+                  </motion.div>
+                )}
+
                 <div className="flex items-end gap-3 md:gap-4">
                   <div className="text-7xl md:text-8xl font-black tracking-tighter text-primary">
                     {score}
@@ -417,6 +466,41 @@ const ResultView = ({ results, onRestart }: ResultViewProps) => {
             </div>
           </div>
         </div>
+
+        {results.answersReview && results.answersReview.length > 0 && (
+          <div className="mt-8 space-y-3 w-full max-w-lg mx-auto">
+            <h3 className="text-lg font-black text-center">Разбор ответов</h3>
+            {results.answersReview.map((a, i) => (
+              <motion.div
+                key={i}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.1 + i * 0.05 }}
+                className={cn(
+                  "p-4 rounded-2xl border text-left",
+                  a.isCorrect
+                    ? "bg-green-500/5 border-green-500/20"
+                    : "bg-red-500/5 border-red-500/20"
+                )}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="text-sm font-bold">{a.questionText}</div>
+                  <span className="text-lg shrink-0">{a.isCorrect ? "✅" : "❌"}</span>
+                </div>
+                {!a.isCorrect && (
+                  <div className="mt-2 text-xs space-y-1">
+                    <div className="text-red-400">Ваш ответ: {a.options[a.playerAnswer]}</div>
+                    <div className="text-green-400">Правильный: {a.options[a.correctAnswer]}</div>
+                  </div>
+                )}
+                {a.explanation && (
+                  <div className="mt-2 text-xs text-blue-400/80 italic">{a.explanation}</div>
+                )}
+                <div className="mt-1 text-[10px] text-white/30 font-bold">+{a.score} очков</div>
+              </motion.div>
+            ))}
+          </div>
+        )}
       </motion.div>
     </div>
   );

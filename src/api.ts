@@ -170,6 +170,12 @@ export const api = {
     isPublic: boolean;
     channelUrl?: string | null;
     waitForAdminStart?: boolean;
+    enableStreaks?: boolean;
+    enablePowerUps?: boolean;
+    enableExplanations?: boolean;
+    enablePodium?: boolean;
+    shuffleQuestions?: boolean;
+    shuffleOptions?: boolean;
     questions: Array<{
       text: string;
       options: string[];
@@ -177,6 +183,8 @@ export const api = {
       mediaUrl?: string;
       mediaType?: string;
       requiresSubscription?: boolean;
+      explanation?: string;
+      questionType?: string;
       order: number;
     }>;
   }) {
@@ -322,6 +330,12 @@ export const api = {
       isPublic: boolean;
       channelUrl?: string | null;
       waitForAdminStart?: boolean;
+      enableStreaks?: boolean;
+      enablePowerUps?: boolean;
+      enableExplanations?: boolean;
+      enablePodium?: boolean;
+      shuffleQuestions?: boolean;
+      shuffleOptions?: boolean;
       questions: Array<{
         text: string;
         options: string[];
@@ -329,6 +343,8 @@ export const api = {
         mediaUrl?: string;
         mediaType?: string;
         requiresSubscription?: boolean;
+        explanation?: string;
+        questionType?: string;
         order: number;
       }>;
     },

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import {
   Activity,
   ExternalLink,
@@ -35,6 +35,12 @@ const QuizView = ({ quizId, onFinish, openedFromStartParam }: QuizViewProps) => 
   const [score, setScore] = useState(0);
   const [showStats, setShowStats] = useState(false);
   const [correctCount, setCorrectCount] = useState(0);
+  const [streak, setStreak] = useState(0);
+  const [showConfetti, setShowConfetti] = useState(false);
+  const [showShake, setShowShake] = useState(false);
+  const [lastExplanation, setLastExplanation] = useState<string | null>(null);
+  const [usedPowerUps, setUsedPowerUps] = useState<Set<string>>(new Set());
+  const [activePowerUp, setActivePowerUp] = useState<string | null>(null);
   const [correctIndex, setCorrectIndex] = useState<number | null>(null);
   const [isCheckingSub, setIsCheckingSub] = useState(false);
   const [subError, setSubError] = useState(false);
@@ -195,6 +201,8 @@ const QuizView = ({ quizId, onFinish, openedFromStartParam }: QuizViewProps) => 
             .length,
           isFirstAttempt,
           quizId: quiz.id,
+          answersReview: [],
+          enablePodium: quiz.enablePodium ?? true,
         });
         return;
       }
@@ -211,6 +219,8 @@ const QuizView = ({ quizId, onFinish, openedFromStartParam }: QuizViewProps) => 
           quizId: quiz.id,
           previousCorrectCount: completeData.previousCorrectCount ?? undefined,
           previousTotalQuestions: completeData.previousTotalQuestions ?? undefined,
+          answersReview: completeData.answersReview ?? [],
+          enablePodium: quiz.enablePodium ?? true,
         });
       } catch {
         onFinish({
@@ -219,6 +229,8 @@ const QuizView = ({ quizId, onFinish, openedFromStartParam }: QuizViewProps) => 
           totalQuestions: scoredQuestions.length,
           isFirstAttempt,
           quizId: quiz.id,
+          answersReview: [],
+          enablePodium: quiz.enablePodium ?? true,
         });
       }
     },
@@ -418,6 +430,7 @@ const QuizView = ({ quizId, onFinish, openedFromStartParam }: QuizViewProps) => 
     setApiError(null);
     setLastFailedAnswer(null);
     setTimedOut(false);
+    setLastExplanation(null);
   }, [currentQ, quiz]);
 
   const question = quiz?.questions[currentQ];
@@ -610,8 +623,32 @@ const QuizView = ({ quizId, onFinish, openedFromStartParam }: QuizViewProps) => 
 
       const answerScore = Number(response.score) || 0;
       const isCorrect = Boolean(response.isCorrect);
+
+      // Apply 2x power-up
+      const finalScore = activePowerUp === "double" ? answerScore * 2 : answerScore;
+
+      // Track streak
+      if (isCorrect) {
+        setStreak(prev => prev + 1);
+        setShowConfetti(true);
+        setTimeout(() => setShowConfetti(false), 1000);
+      } else {
+        if (activePowerUp !== "shield") {
+          setStreak(0);
+        }
+        setShowShake(true);
+        setTimeout(() => setShowShake(false), 500);
+      }
+
+      // Show explanation
+      if (response.explanation) {
+        setLastExplanation(response.explanation);
+      }
+
+      setActivePowerUp(null);
+
       hapticNotify(isCorrect ? "success" : "error");
-      const nextScore = score + answerScore;
+      const nextScore = score + finalScore;
       const nextCorrectCount = correctCount + (isCorrect ? 1 : 0);
 
       setScore(nextScore);
@@ -637,6 +674,7 @@ const QuizView = ({ quizId, onFinish, openedFromStartParam }: QuizViewProps) => 
           setCurrentQ((q) => q + 1);
           setSelected(null);
           setShowStats(false);
+          setLastExplanation(null);
         } else {
           await completeAndFinish(nextScore, nextCorrectCount);
         }
@@ -852,6 +890,33 @@ const QuizView = ({ quizId, onFinish, openedFromStartParam }: QuizViewProps) => 
 
   return (
     <div className="fx-scroll h-[100dvh] w-full flex items-start justify-start p-4 md:p-8 bg-background overflow-y-auto overscroll-y-contain">
+      <AnimatePresence>
+        {showConfetti && (
+          <motion.div
+            initial={{ opacity: 1 }}
+            animate={{ opacity: 0 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 1 }}
+            className="fixed inset-0 pointer-events-none z-50 flex items-center justify-center"
+          >
+            {Array.from({ length: 12 }, (_, i) => (
+              <motion.div
+                key={i}
+                initial={{ y: 0, x: 0, scale: 1 }}
+                animate={{
+                  y: -200 - Math.random() * 200,
+                  x: (Math.random() - 0.5) * 300,
+                  scale: 0,
+                  rotate: Math.random() * 360,
+                }}
+                transition={{ duration: 0.8, ease: "easeOut" }}
+                className="absolute w-3 h-3 rounded-full"
+                style={{ backgroundColor: ["#FFD700", "#FF6B6B", "#4ECDC4", "#45B7D1", "#96CEB4", "#FFEAA7"][i % 6] }}
+              />
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
       <div className="w-full max-w-5xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-6 md:gap-8 items-start py-8">
         <div className="lg:col-span-8 space-y-6 order-1">
           <div className="flex justify-between items-end px-2">
@@ -889,6 +954,17 @@ const QuizView = ({ quizId, onFinish, openedFromStartParam }: QuizViewProps) => 
                   >
                     {timeLeft}s
                   </div>
+                  {quiz?.enableStreaks && streak >= 2 && (
+                    <motion.div
+                      key={`streak-${streak}`}
+                      initial={{ scale: 0, rotate: -10 }}
+                      animate={{ scale: 1, rotate: 0 }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-orange-500/20 border border-orange-500/30"
+                    >
+                      <span className="text-lg">🔥</span>
+                      <span className="text-orange-400 font-black text-sm">{streak}x</span>
+                    </motion.div>
+                  )}
                 </div>
               )}
               <div className="relative">
@@ -992,7 +1068,40 @@ const QuizView = ({ quizId, onFinish, openedFromStartParam }: QuizViewProps) => 
               </motion.div>
             )}
 
+            {quiz?.enablePowerUps && selected === null && (
+              <div className="flex justify-center gap-3 mb-4">
+                {[
+                  { id: "double", icon: "⭐", label: "2x", color: "text-yellow-400 bg-yellow-500/10 border-yellow-500/20" },
+                  { id: "freeze", icon: "❄️", label: "+5с", color: "text-blue-400 bg-blue-500/10 border-blue-500/20" },
+                  { id: "shield", icon: "🛡️", label: "Щит", color: "text-green-400 bg-green-500/10 border-green-500/20" },
+                ]
+                  .filter((p) => !usedPowerUps.has(p.id))
+                  .map((p) => (
+                    <motion.button
+                      key={p.id}
+                      whileTap={{ scale: 0.9 }}
+                      onClick={() => {
+                        if (p.id === "freeze" && activePowerUp !== p.id) {
+                          setTimeLeft((t) => t + 5);
+                        }
+                        setActivePowerUp(activePowerUp === p.id ? null : p.id);
+                        if (p.id !== activePowerUp) {
+                          setUsedPowerUps(prev => new Set(prev).add(p.id));
+                        }
+                      }}
+                      className={`flex flex-col items-center gap-1 p-3 rounded-2xl border transition-all ${p.color} ${
+                        activePowerUp === p.id ? "ring-2 ring-primary scale-105" : ""
+                      }`}
+                    >
+                      <span className="text-xl">{p.icon}</span>
+                      <span className="text-[10px] font-bold">{p.label}</span>
+                    </motion.button>
+                  ))}
+              </div>
+            )}
+
             {question.options.length > 0 && (
+              <motion.div animate={showShake ? { x: [-8, 8, -8, 8, 0] } : {}} transition={{ duration: 0.4 }}>
               <div className="grid gap-3 md:gap-4 relative z-10">
                 {question.options.map((opt, idx) => {
                   const isSelected = selected === idx;
@@ -1057,7 +1166,22 @@ const QuizView = ({ quizId, onFinish, openedFromStartParam }: QuizViewProps) => 
                   );
                 })}
               </div>
+              </motion.div>
             )}
+
+            <AnimatePresence>
+              {lastExplanation && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  className="mt-3 p-4 rounded-2xl bg-blue-500/10 border border-blue-500/20"
+                >
+                  <div className="text-[10px] font-bold uppercase tracking-widest text-blue-400 mb-1">Объяснение</div>
+                  <div className="text-sm text-white/80">{lastExplanation}</div>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             {apiError && lastFailedAnswer !== null && selected === null && (
               <div className="mt-6 flex items-center justify-center">

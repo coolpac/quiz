@@ -51,6 +51,13 @@ pm2 start ecosystem.config.cjs
 pm2 save
 ```
 
+### Масштабирование (500+ игроков в зале)
+- **REDIS_URL** — обязателен для буферизации ответов (Redis Streams), иначе ответы пишутся в память
+- **PM2 cluster** — `pm2 start ecosystem.config.cjs -i max` использует все ядра CPU
+- **PostgreSQL** — пул 80 соединений (настроен в `lib/prisma.ts`). Для PgBouncer оставить 10–20
+- **Rate limit** — 18k req/min на IP (≈500 игроков за одним NAT). При необходимости поднять в `rateLimit.ts`
+- **Socket.IO** — одна нода держит ~10–30k подключений; для 500+ хватает. Для горизонтального масштабирования — Redis adapter + sticky sessions
+
 ### systemd (consumer)
 Example service: `server/deploy/quiz-consumer.service`
 ```
@@ -92,3 +99,12 @@ Sync and deploy updates:
 ```
 DEPLOY_HOST=81.200.153.155 DEPLOY_USER=root ./deploy/update.sh
 ```
+
+### Обновление с сервера
+Если код уже на сервере (git clone или после первого деплоя):
+```bash
+# На сервере:
+cd /opt/quiz
+./deploy/rebuild-on-server.sh
+```
+При наличии git — сделает `git pull`, затем пересоберёт и перезапустит контейнеры.

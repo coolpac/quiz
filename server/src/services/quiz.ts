@@ -8,6 +8,8 @@ export type CreateQuestionInput = {
   mediaType?: string;
   requiresSubscription?: boolean;
   order: number;
+  explanation?: string;
+  questionType?: string;
 };
 
 export type CreateQuizInput = {
@@ -20,6 +22,15 @@ export type CreateQuizInput = {
   channelUrl?: string | null;
   waitForAdminStart?: boolean;
   questions: CreateQuestionInput[];
+  enableStreaks?: boolean;
+  enablePowerUps?: boolean;
+  enableExplanations?: boolean;
+  enablePodium?: boolean;
+  shuffleQuestions?: boolean;
+  shuffleOptions?: boolean;
+  enableTeams?: boolean;
+  teamCount?: number;
+  selfPaced?: boolean;
 };
 
 export class ValidationError extends Error {
@@ -91,6 +102,15 @@ export const createQuiz = async (input: CreateQuizInput) => {
       isPublic: input.isPublic ?? true,
       channelUrl: input.channelUrl ?? null,
       waitForAdminStart: input.waitForAdminStart ?? false,
+      enableStreaks: input.enableStreaks ?? true,
+      enablePowerUps: input.enablePowerUps ?? false,
+      enableExplanations: input.enableExplanations ?? true,
+      enablePodium: input.enablePodium ?? true,
+      shuffleQuestions: input.shuffleQuestions ?? false,
+      shuffleOptions: input.shuffleOptions ?? false,
+      enableTeams: input.enableTeams ?? false,
+      teamCount: input.teamCount ?? 2,
+      selfPaced: input.selfPaced ?? false,
       expiresAt,
       questions: {
         create: input.questions.map((question) => {
@@ -106,6 +126,8 @@ export const createQuiz = async (input: CreateQuizInput) => {
             mediaType: question.mediaType ?? null,
             requiresSubscription: question.requiresSubscription ?? false,
             order: question.order,
+            explanation: question.explanation ?? null,
+            questionType: question.questionType ?? "multiple_choice",
           };
         }),
       },
@@ -153,6 +175,15 @@ export const updateQuiz = async (
         isPublic: input.isPublic ?? true,
         channelUrl: input.channelUrl ?? null,
         waitForAdminStart: input.waitForAdminStart ?? false,
+        enableStreaks: input.enableStreaks ?? true,
+        enablePowerUps: input.enablePowerUps ?? false,
+        enableExplanations: input.enableExplanations ?? true,
+        enablePodium: input.enablePodium ?? true,
+        shuffleQuestions: input.shuffleQuestions ?? false,
+        shuffleOptions: input.shuffleOptions ?? false,
+        enableTeams: input.enableTeams ?? false,
+        teamCount: input.teamCount ?? 2,
+        selfPaced: input.selfPaced ?? false,
         questions: {
           create: input.questions.map((question) => {
             const options = question.options
@@ -167,6 +198,8 @@ export const updateQuiz = async (
               mediaType: question.mediaType ?? null,
               requiresSubscription: question.requiresSubscription ?? false,
               order: question.order,
+              explanation: question.explanation ?? null,
+              questionType: question.questionType ?? "multiple_choice",
             };
           }),
         },

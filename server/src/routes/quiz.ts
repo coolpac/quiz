@@ -16,6 +16,7 @@ import {
   primeQuizQuestions,
 } from "../services/questionsCache";
 import { ValidationError, createQuiz, updateQuiz } from "../services/quiz";
+import { calculateScore } from "../services/scoring";
 import { checkSubscription } from "../services/subscription";
 import { getTelegramAvatarUrl } from "../services/telegramAvatar";
 import {
@@ -195,6 +196,8 @@ router.get("/:id", async (req, res) => {
         : undefined,
       requiresSubscription: question.requiresSubscription,
       channelUrl: question.requiresSubscription ? quiz.channelUrl ?? undefined : undefined,
+      explanation: question.explanation ?? null,
+      questionType: question.questionType ?? "multiple_choice",
     };
     return isCreator ? { ...base, correctIndex: question.correctIndex } : base;
   });
@@ -213,6 +216,15 @@ router.get("/:id", async (req, res) => {
       channelUrl: quiz.channelUrl,
       waitForAdminStart: quiz.waitForAdminStart,
       canStart,
+      enableStreaks: quiz.enableStreaks,
+      enablePowerUps: quiz.enablePowerUps,
+      enableExplanations: quiz.enableExplanations,
+      enablePodium: quiz.enablePodium,
+      shuffleQuestions: quiz.shuffleQuestions,
+      shuffleOptions: quiz.shuffleOptions,
+      enableTeams: quiz.enableTeams,
+      teamCount: quiz.teamCount,
+      selfPaced: quiz.selfPaced,
       questions,
     },
     isFirstAttempt: !firstAttempt,
@@ -340,7 +352,7 @@ router.post("/:id/answer", answerLimiter, async (req, res) => {
 
   const quiz = await prisma.quiz.findUnique({
     where: { id },
-    select: { expiresAt: true },
+    select: { expiresAt: true, timePerQuestion: true },
   });
   if (!quiz) {
     res.status(404).json({ error: "Quiz not found" });
@@ -401,7 +413,9 @@ router.post("/:id/answer", answerLimiter, async (req, res) => {
 
   const isCorrect = parsedAnswerIndex === question.correctIndex;
   const safeTimeLeft = Math.max(0, parsedTimeLeft || 0);
-  const score = isCorrect ? 100 + safeTimeLeft * 10 : 0;
+  const questionTimerSec = quiz.timePerQuestion ?? 15;
+  const responseTimeSec = questionTimerSec - safeTimeLeft;
+  const score = calculateScore(isCorrect, responseTimeSec * 1000, questionTimerSec * 1000);
 
   let enqueued: boolean;
   try {
@@ -452,6 +466,7 @@ router.post("/:id/answer", answerLimiter, async (req, res) => {
     score,
     stats,
     isFirstAttempt: attempt.isFirstAttempt,
+    explanation: question.explanation ?? null,
   });
 });
 
@@ -538,7 +553,7 @@ router.post("/:id/complete", async (req, res) => {
     markLeaderboardDirty(id, visitor.id);
   }
 
-  const [leaderboard, firstAttempt] = await Promise.all([
+  const [leaderboard, firstAttempt, playerAnswers] = await Promise.all([
     getLeaderboardUpdate(id, visitor.id),
     attempt.isFirstAttempt
       ? Promise.resolve(null)
@@ -546,7 +561,35 @@ router.post("/:id/complete", async (req, res) => {
           where: { quizId: id, visitorId: visitor.id, isFirstAttempt: true },
           select: { correctCount: true, totalQuestions: true },
         }),
+    prisma.answer.findMany({
+      where: { attemptId: attempt.id },
+      include: {
+        question: {
+          select: {
+            text: true,
+            options: true,
+            correctIndex: true,
+            explanation: true,
+            order: true,
+            questionType: true,
+          },
+        },
+      },
+      orderBy: { answeredAt: "asc" },
+    }),
   ]);
+
+  const answersReview = playerAnswers.map((a) => ({
+    questionIndex: a.question.order,
+    questionText: a.question.text,
+    options: a.question.options as string[],
+    playerAnswer: a.answerIndex,
+    correctAnswer: a.question.correctIndex,
+    isCorrect: a.isCorrect,
+    score: a.score,
+    timeLeft: a.timeLeft,
+    explanation: a.question.explanation,
+  }));
 
   res.json({
     isFirstAttempt: attempt.isFirstAttempt,
@@ -554,6 +597,7 @@ router.post("/:id/complete", async (req, res) => {
     totalPlayers: leaderboard.totalPlayers,
     previousCorrectCount: firstAttempt?.correctCount ?? null,
     previousTotalQuestions: firstAttempt?.totalQuestions ?? null,
+    answersReview,
   });
 });
 
