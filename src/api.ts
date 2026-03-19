@@ -320,6 +320,24 @@ export const api = {
     return response.json();
   },
 
+  async exportQuizCsv(quizId: string) {
+    const response = await fetch(`${baseUrl}/api/quiz/${quizId}/export-csv`, {
+      headers: buildHeaders(false),
+    });
+    if (!response.ok) {
+      throw new Error(await parseError(response));
+    }
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `quiz_results.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  },
+
   async updateQuiz(
     quizId: string,
     data: {

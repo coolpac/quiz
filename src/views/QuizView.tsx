@@ -13,13 +13,24 @@ import {
 } from "lucide-react";
 import { closeMiniApp } from "@telegram-apps/sdk";
 import { api } from "../api";
-import { connectSocket, releaseSocket } from "../socket";
+import { connectSocket, getSocket, releaseSocket } from "../socket";
 import { Button } from "../components/ui/Button";
 import SocketStatusBadge from "../components/SocketStatusBadge";
 import { cn } from "../lib/cn";
 import { useToast, type ToastVariant } from "../components/Toast";
 import { hapticImpact, hapticNotify, hapticSelection } from "../lib/telegramUi";
 import type { LiveFeedItem, QuizData, QuizResults } from "../types/quiz";
+
+const teamColors = [
+  "bg-red-500/20 border-red-500/30 text-red-400",
+  "bg-blue-500/20 border-blue-500/30 text-blue-400",
+  "bg-green-500/20 border-green-500/30 text-green-400",
+  "bg-yellow-500/20 border-yellow-500/30 text-yellow-400",
+  "bg-purple-500/20 border-purple-500/30 text-purple-400",
+  "bg-pink-500/20 border-pink-500/30 text-pink-400",
+  "bg-cyan-500/20 border-cyan-500/30 text-cyan-400",
+  "bg-orange-500/20 border-orange-500/30 text-orange-400",
+];
 
 type QuizViewProps = {
   quizId?: string | null;
@@ -56,6 +67,9 @@ const QuizView = ({ quizId, onFinish, openedFromStartParam }: QuizViewProps) => 
   const [liveFeed, setLiveFeed] = useState<LiveFeedItem[]>([]);
   const [playersCount, setPlayersCount] = useState<number | null>(null);
   const [isFirstAttempt, setIsFirstAttempt] = useState(true);
+  const [teamIndex, setTeamIndex] = useState<number | null>(null);
+  const [wordInput, setWordInput] = useState("");
+  const [wordCounts, setWordCounts] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [expired, setExpired] = useState(false);
   const [canStart, setCanStart] = useState(true);
@@ -104,8 +118,31 @@ const QuizView = ({ quizId, onFinish, openedFromStartParam }: QuizViewProps) => 
         return;
       }
 
-      setQuiz(data.quiz);
-      setCanStart((data.quiz as { canStart?: boolean })?.canStart !== false);
+      let processedQuiz = data.quiz;
+      if (processedQuiz.shuffleQuestions) {
+        const shuffled = [...processedQuiz.questions];
+        for (let i = shuffled.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+        }
+        processedQuiz = { ...processedQuiz, questions: shuffled };
+      }
+      if (processedQuiz.shuffleOptions) {
+        processedQuiz = {
+          ...processedQuiz,
+          questions: processedQuiz.questions.map((q: any) => {
+            const options = [...(q.options as string[])];
+            const correctOption = options[q.correctIndex];
+            for (let i = options.length - 1; i > 0; i--) {
+              const j = Math.floor(Math.random() * (i + 1));
+              [options[i], options[j]] = [options[j], options[i]];
+            }
+            return { ...q, options, correctIndex: options.indexOf(correctOption) };
+          }),
+        };
+      }
+      setQuiz(processedQuiz);
+      setCanStart((processedQuiz as { canStart?: boolean })?.canStart !== false);
       setIsFirstAttempt(Boolean(data.isFirstAttempt));
       setCurrentQ(0);
       setSelected(null);
@@ -168,6 +205,9 @@ const QuizView = ({ quizId, onFinish, openedFromStartParam }: QuizViewProps) => 
         }
         if (typeof data?.isFirstAttempt === "boolean") {
           setIsFirstAttempt(data.isFirstAttempt);
+        }
+        if (typeof data?.teamIndex === "number") {
+          setTeamIndex(data.teamIndex);
         }
       })
       .catch(() => {
@@ -389,6 +429,16 @@ const QuizView = ({ quizId, onFinish, openedFromStartParam }: QuizViewProps) => 
     };
 
     socket.on("players:count", handlePlayersCount);
+    const handleWordCloudWord = (payload: { questionIndex: number; word: string }) => {
+      if (payload.questionIndex === currentQRef.current) {
+        setWordCounts((prev) => ({
+          ...prev,
+          [payload.word]: (prev[payload.word] || 0) + 1,
+        }));
+      }
+    };
+
+    socket.on("wordcloud:word", handleWordCloudWord);
     socket.on("quiz:started", handleQuizStarted);
     socket.on("quiz:expired", handleQuizExpired);
     socket.on("connect", handleConnect);
@@ -403,6 +453,7 @@ const QuizView = ({ quizId, onFinish, openedFromStartParam }: QuizViewProps) => 
       socket.off("stats:updated", handleStatsUpdated);
       socket.off("leaderboard:updated", handleLeaderboardUpdated);
       socket.off("players:count", handlePlayersCount);
+      socket.off("wordcloud:word", handleWordCloudWord);
       socket.off("quiz:started", handleQuizStarted);
       socket.off("quiz:expired", handleQuizExpired);
       socket.off("connect", handleConnect);
@@ -431,6 +482,8 @@ const QuizView = ({ quizId, onFinish, openedFromStartParam }: QuizViewProps) => 
     setLastFailedAnswer(null);
     setTimedOut(false);
     setLastExplanation(null);
+    setWordInput("");
+    setWordCounts({});
   }, [currentQ, quiz]);
 
   const question = quiz?.questions[currentQ];
@@ -920,13 +973,23 @@ const QuizView = ({ quizId, onFinish, openedFromStartParam }: QuizViewProps) => 
       <div className="w-full max-w-5xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-6 md:gap-8 items-start py-8">
         <div className="lg:col-span-8 space-y-6 order-1">
           <div className="flex justify-between items-end px-2">
-            <div className="space-y-1">
-              <div className="text-primary font-black text-4xl md:text-5xl">
-                0{currentQ + 1}
+            <div className="space-y-1 flex items-center gap-3">
+              <div>
+                <div className="text-primary font-black text-4xl md:text-5xl">
+                  0{currentQ + 1}
+                </div>
+                <div className="text-[10px] md:text-xs font-bold uppercase tracking-widest opacity-50 text-foreground">
+                  Вопрос из 0{quiz.questions.length}
+                </div>
               </div>
-              <div className="text-[10px] md:text-xs font-bold uppercase tracking-widest opacity-50 text-foreground">
-                Вопрос из 0{quiz.questions.length}
-              </div>
+              {teamIndex !== null && (
+                <div className={cn(
+                  "px-3 py-1 rounded-full text-[10px] font-bold border",
+                  teamColors[teamIndex % teamColors.length]
+                )}>
+                  Команда {teamIndex + 1}
+                </div>
+              )}
             </div>
             {!question.requiresSubscription && (
               <div className="flex items-end">
@@ -1100,8 +1163,88 @@ const QuizView = ({ quizId, onFinish, openedFromStartParam }: QuizViewProps) => 
               </div>
             )}
 
-            {question.options.length > 0 && (
+            {question.questionType === "word_cloud" ? (
+              <div className="space-y-4 relative z-10">
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={wordInput}
+                    onChange={(e) => setWordInput(e.target.value.slice(0, 30))}
+                    placeholder="Введите слово..."
+                    className="flex-1 p-3 rounded-xl bg-white/5 border border-white/10 text-sm outline-none focus:border-primary/50 text-foreground"
+                    maxLength={30}
+                  />
+                  <Button
+                    onClick={() => {
+                      if (wordInput.trim() && quiz) {
+                        const sock = getSocket();
+                        sock.emit("wordcloud:submit", {
+                          quizId: quiz.id,
+                          questionIndex: currentQ,
+                          word: wordInput.trim(),
+                        });
+                        setWordInput("");
+                      }
+                    }}
+                    disabled={!wordInput.trim()}
+                    size="sm"
+                  >
+                    Отправить
+                  </Button>
+                </div>
+                <div className="flex flex-wrap gap-2 justify-center p-4 rounded-2xl bg-white/5 border border-white/10 min-h-[120px]">
+                  {Object.entries(wordCounts).map(([word, count]) => (
+                    <span
+                      key={word}
+                      className="text-primary font-bold transition-all"
+                      style={{ fontSize: `${Math.min(12 + count * 4, 32)}px` }}
+                    >
+                      {word}
+                    </span>
+                  ))}
+                  {Object.keys(wordCounts).length === 0 && (
+                    <span className="text-xs text-muted-foreground font-medium">
+                      Слова появятся здесь
+                    </span>
+                  )}
+                </div>
+              </div>
+            ) : question.options.length > 0 ? (
               <motion.div animate={showShake ? { x: [-8, 8, -8, 8, 0] } : {}} transition={{ duration: 0.4 }}>
+              {question.questionType === "true_false" ? (
+                <div className="grid grid-cols-2 gap-4 relative z-10">
+                  {(question.options as string[]).slice(0, 2).map((option, idx) => {
+                    const isSelected = selected === idx;
+                    const isCorrectOption =
+                      showStats && correctIndex !== null && idx === correctIndex;
+
+                    return (
+                      <motion.button
+                        key={idx}
+                        whileTap={{ scale: 0.95 }}
+                        onClick={() =>
+                          selected === null && !isCheckingSub && handleAnswer(idx)
+                        }
+                        disabled={selected !== null}
+                        className={cn(
+                          "p-6 rounded-2xl text-lg font-black transition-all border-2",
+                          selected === null
+                            ? idx === 0
+                              ? "bg-green-500/10 border-green-500/30 hover:border-green-500/60 text-green-400"
+                              : "bg-red-500/10 border-red-500/30 hover:border-red-500/60 text-red-400"
+                            : isCorrectOption
+                              ? "bg-green-500/20 border-green-500"
+                              : isSelected
+                                ? "bg-red-500/20 border-red-500"
+                                : "opacity-40",
+                        )}
+                      >
+                        {option}
+                      </motion.button>
+                    );
+                  })}
+                </div>
+              ) : (
               <div className="grid gap-3 md:gap-4 relative z-10">
                 {question.options.map((opt, idx) => {
                   const isSelected = selected === idx;
@@ -1166,8 +1309,9 @@ const QuizView = ({ quizId, onFinish, openedFromStartParam }: QuizViewProps) => 
                   );
                 })}
               </div>
+              )}
               </motion.div>
-            )}
+            ) : null}
 
             <AnimatePresence>
               {lastExplanation && (
@@ -1194,6 +1338,7 @@ const QuizView = ({ quizId, onFinish, openedFromStartParam }: QuizViewProps) => 
         </div>
 
         <div className="lg:col-span-4 space-y-6 order-2 lg:order-2">
+          {!quiz?.selfPaced && (
           <div className="p-6 rounded-[2rem] bg-card/50 dark:bg-white/5 border border-black/5 dark:border-white/10 backdrop-blur-md">
             <h3 className="text-sm font-black uppercase tracking-widest mb-6 flex items-center gap-2 text-foreground">
               <Activity size={16} className="text-primary" /> Прямой эфир
@@ -1246,7 +1391,9 @@ const QuizView = ({ quizId, onFinish, openedFromStartParam }: QuizViewProps) => 
               })}
             </div>
           </div>
+          )}
 
+          {!quiz?.selfPaced && (
           <div className="p-6 rounded-[2rem] bg-gradient-to-br from-primary/10 to-purple-600/10 dark:from-primary/20 dark:to-purple-600/20 border border-primary/20 backdrop-blur-md">
             <div className="flex items-center gap-4 mb-4">
               <div className="p-3 rounded-2xl bg-primary text-white shadow-lg shadow-primary/40">
@@ -1276,6 +1423,7 @@ const QuizView = ({ quizId, onFinish, openedFromStartParam }: QuizViewProps) => 
               />
             </div>
           </div>
+          )}
         </div>
       </div>
     </div>

@@ -23,6 +23,15 @@ const getRoomCount = (room: string) => {
   return io.sockets.adapter.rooms.get(room)?.size ?? 0;
 };
 
+export const getConnectedCount = (): number => {
+  try {
+    const io = getIO();
+    return io.engine?.clientsCount ?? 0;
+  } catch {
+    return 0;
+  }
+};
+
 export const emitPlayersCount = (quizId: string) => {
   if (!io) {
     return;

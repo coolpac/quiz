@@ -3,8 +3,14 @@ import { prisma } from "../lib/prisma";
 import { validateTelegramInitData } from "../middleware/auth";
 import { adminOnly } from "../middleware/adminOnly";
 import { getBacklogMetrics } from "../services/answerBuffer";
+import { getConnectedCount } from "../socketState";
 
 const router = Router();
+
+// Public endpoint — no auth required
+router.get("/online", (_req, res) => {
+  res.json({ count: getConnectedCount() });
+});
 
 router.use(validateTelegramInitData);
 

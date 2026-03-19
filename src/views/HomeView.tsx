@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import {
   ChevronRight,
   HelpCircle,
   Plus,
+  Search,
   Settings,
   Trophy,
   Users,
@@ -42,6 +43,31 @@ const difficultyColor: Record<string, string> = {
 const HomeView = ({ onStart, onAdmin, onCreate, onPlayQuiz, isAdmin, hasQuizId }: HomeViewProps) => {
   const [quizzes, setQuizzes] = useState<ActiveQuiz[]>([]);
   const [loading, setLoading] = useState(true);
+  const [onlineCount, setOnlineCount] = useState<number | null>(null);
+  const [search, setSearch] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [sortBy, setSortBy] = useState<"newest" | "popular">("newest");
+  const [recentQuizzes, setRecentQuizzes] = useState<string[]>([]);
+
+  const categories = useMemo(() => {
+    const cats = [...new Set(quizzes.map(q => q.category))];
+    return cats.sort();
+  }, [quizzes]);
+
+  const filteredQuizzes = useMemo(() => {
+    let result = quizzes;
+    if (search) {
+      const q = search.toLowerCase();
+      result = result.filter(quiz => quiz.title.toLowerCase().includes(q) || quiz.category.toLowerCase().includes(q));
+    }
+    if (selectedCategory) {
+      result = result.filter(quiz => quiz.category === selectedCategory);
+    }
+    if (sortBy === "popular") {
+      result = [...result].sort((a, b) => b.playersCount - a.playersCount);
+    }
+    return result;
+  }, [quizzes, search, selectedCategory, sortBy]);
 
   useEffect(() => {
     api
@@ -50,6 +76,30 @@ const HomeView = ({ onStart, onAdmin, onCreate, onPlayQuiz, isAdmin, hasQuizId }
       .catch(() => setQuizzes([]))
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    fetch(`${import.meta.env.VITE_API_URL ?? ""}/api/stats/online`)
+      .then((r) => r.json())
+      .then((data) => setOnlineCount(data.count ?? null))
+      .catch(() => setOnlineCount(null));
+  }, []);
+
+  useEffect(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem("recentQuizzes") || "[]") as string[];
+      setRecentQuizzes(stored.slice(0, 5));
+    } catch { setRecentQuizzes([]); }
+  }, []);
+
+  const handlePlayQuiz = (quizId: string) => {
+    hapticSelection();
+    try {
+      const stored = JSON.parse(localStorage.getItem("recentQuizzes") || "[]") as string[];
+      const updated = [quizId, ...stored.filter(id => id !== quizId)].slice(0, 10);
+      localStorage.setItem("recentQuizzes", JSON.stringify(updated));
+    } catch {}
+    onPlayQuiz(quizId);
+  };
 
   return (
     <div className="fx-scroll flex flex-col items-center justify-start md:justify-center min-h-[100dvh] w-full max-w-7xl mx-auto px-6 py-10 relative overflow-x-hidden overflow-y-auto overscroll-y-contain">
@@ -67,7 +117,7 @@ const HomeView = ({ onStart, onAdmin, onCreate, onPlayQuiz, isAdmin, hasQuizId }
             <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500" />
           </span>
           <span className="text-sm font-bold tracking-wide uppercase opacity-80 text-foreground">
-            1,429 Игроков в сети
+            {onlineCount !== null ? `${onlineCount.toLocaleString("ru-RU")} Игроков в сети` : "Онлайн"}
           </span>
         </div>
 
@@ -135,6 +185,51 @@ const HomeView = ({ onStart, onAdmin, onCreate, onPlayQuiz, isAdmin, hasQuizId }
             Выберите квиз и начните играть
           </p>
 
+          {/* Search */}
+          <div className="relative mt-3">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Поиск квиза..."
+              className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-white/5 border border-white/10 text-sm focus:border-primary/50 outline-none transition-colors placeholder:text-white/30"
+            />
+          </div>
+
+          {/* Category pills + sort */}
+          <div className="flex items-center gap-2 mt-3 overflow-x-auto scrollbar-none pb-1">
+            <button
+              onClick={() => setSelectedCategory(null)}
+              className={cn(
+                "px-3 py-1 rounded-full text-[10px] font-bold shrink-0 transition-all border",
+                !selectedCategory ? "bg-primary/20 border-primary/40 text-primary" : "bg-white/5 border-white/10 text-white/40"
+              )}
+            >
+              Все
+            </button>
+            {categories.map(cat => (
+              <button
+                key={cat}
+                onClick={() => setSelectedCategory(selectedCategory === cat ? null : cat)}
+                className={cn(
+                  "px-3 py-1 rounded-full text-[10px] font-bold shrink-0 transition-all border",
+                  selectedCategory === cat ? "bg-primary/20 border-primary/40 text-primary" : "bg-white/5 border-white/10 text-white/40"
+                )}
+              >
+                {cat}
+              </button>
+            ))}
+            <div className="ml-auto shrink-0">
+              <button
+                onClick={() => setSortBy(sortBy === "newest" ? "popular" : "newest")}
+                className="px-3 py-1 rounded-full text-[10px] font-bold bg-white/5 border border-white/10 text-white/40 hover:text-white/60 transition-colors"
+              >
+                {sortBy === "newest" ? "Новые" : "Популярные"}
+              </button>
+            </div>
+          </div>
+
           {loading ? (
             <div className="flex gap-4 mt-4 overflow-x-auto pb-2 snap-x snap-mandatory scrollbar-none md:grid md:grid-cols-3 md:overflow-x-visible">
               {[0, 1, 2].map((i) => (
@@ -154,23 +249,22 @@ const HomeView = ({ onStart, onAdmin, onCreate, onPlayQuiz, isAdmin, hasQuizId }
                 </div>
               ))}
             </div>
-          ) : quizzes.length === 0 ? (
+          ) : filteredQuizzes.length === 0 ? (
             <div className="mt-4 flex flex-col items-center gap-2 py-8 rounded-2xl bg-white/5 border border-white/10">
               <HelpCircle className="w-8 h-8 text-white/20" />
-              <p className="text-sm text-white/40 font-medium">Нет активных квизов</p>
+              <p className="text-sm text-white/40 font-medium">
+                {quizzes.length > 0 ? "Ничего не найдено" : "Нет активных квизов"}
+              </p>
             </div>
           ) : (
             <div className="flex gap-4 mt-4 overflow-x-auto pb-2 snap-x snap-mandatory scrollbar-none md:grid md:grid-cols-3 md:overflow-x-visible">
-              {quizzes.map((quiz, i) => (
+              {filteredQuizzes.map((quiz, i) => (
                 <motion.button
                   key={quiz.id}
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: i * 0.08 }}
-                  onClick={() => {
-                    hapticSelection();
-                    onPlayQuiz(quiz.id);
-                  }}
+                  onClick={() => handlePlayQuiz(quiz.id)}
                   className="min-w-[200px] p-4 rounded-2xl bg-white/5 border border-white/10 hover:border-primary/40 transition-all text-left snap-start"
                 >
                   <div className="text-sm font-black truncate text-foreground">{quiz.title}</div>
@@ -196,6 +290,27 @@ const HomeView = ({ onStart, onAdmin, onCreate, onPlayQuiz, isAdmin, hasQuizId }
             </div>
           )}
         </div>
+
+        {recentQuizzes.length > 0 && quizzes.some(q => recentQuizzes.includes(q.id)) && (
+          <div className="mt-6">
+            <h3 className="text-sm font-bold text-white/50 uppercase tracking-widest px-1">Недавно сыграно</h3>
+            <div className="flex gap-3 mt-2 overflow-x-auto scrollbar-none pb-1">
+              {recentQuizzes
+                .map(id => quizzes.find(q => q.id === id))
+                .filter(Boolean)
+                .map((quiz) => (
+                  <button
+                    key={quiz!.id}
+                    onClick={() => handlePlayQuiz(quiz!.id)}
+                    className="min-w-[150px] p-3 rounded-xl bg-white/5 border border-white/10 hover:border-primary/30 text-left shrink-0 transition-all"
+                  >
+                    <div className="text-xs font-bold truncate">{quiz!.title}</div>
+                    <div className="text-[10px] text-white/40 mt-1">{quiz!.category}</div>
+                  </button>
+                ))}
+            </div>
+          </div>
+        )}
 
         <div className="grid grid-cols-3 gap-4 md:gap-8 pt-12 max-w-md mx-auto px-4">
           {[

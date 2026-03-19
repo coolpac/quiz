@@ -5,6 +5,7 @@ import {
   BarChart3,
   Copy,
   Crown,
+  Download,
   Eye,
   ExternalLink,
   PlayCircle,
@@ -969,6 +970,22 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
                               <QrCode size={14} /> Ссылка
                             </Button>
                           </div>
+                          <Button
+                            size="sm"
+                            variant="glass"
+                            className="w-full"
+                            onClick={async () => {
+                              hapticSelection();
+                              try {
+                                await api.exportQuizCsv(quiz.id);
+                                pushToast("CSV скачан", "success");
+                              } catch {
+                                pushToast("Ошибка экспорта", "error");
+                              }
+                            }}
+                          >
+                            <Download size={14} className="mr-1" /> Экспорт CSV
+                          </Button>
                           <Button
                             size="sm"
                             variant="glass"

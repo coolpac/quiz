@@ -77,6 +77,9 @@ const CreateQuizView = ({ onExit, quizId: editQuizId }: CreateQuizViewProps) => 
   const [enablePodium, setEnablePodium] = useState(true);
   const [shuffleQuestions, setShuffleQuestions] = useState(false);
   const [shuffleOptions, setShuffleOptions] = useState(false);
+  const [selfPaced, setSelfPaced] = useState(false);
+  const [enableTeams, setEnableTeams] = useState(false);
+  const [teamCount, setTeamCount] = useState(2);
   const [questions, setQuestions] = useState<QuestionDraft[]>([
     createEmptyQuestion(),
   ]);
@@ -196,14 +199,16 @@ const CreateQuizView = ({ onExit, quizId: editQuizId }: CreateQuizViewProps) => 
       if (!question.text.trim() || question.text.trim().length < 3) {
         return `Вопрос ${i + 1} пуст`;
       }
+      const isWordCloud = question.questionType === "word_cloud";
       const nonEmptyOptions = question.options.filter((opt) => opt.trim());
       const isSubscriptionGate =
         question.requiresSubscription && nonEmptyOptions.length === 0;
-      if (!isSubscriptionGate && nonEmptyOptions.length < 2) {
+      if (!isSubscriptionGate && !isWordCloud && nonEmptyOptions.length < 2) {
         return `Вопрос ${i + 1}: минимум 2 варианта`;
       }
       if (
         !isSubscriptionGate &&
+        !isWordCloud &&
         (question.correctIndex < 0 ||
           question.correctIndex >= question.options.length ||
           !question.options[question.correctIndex]?.trim())
@@ -253,6 +258,9 @@ const CreateQuizView = ({ onExit, quizId: editQuizId }: CreateQuizViewProps) => 
         enablePodium,
         shuffleQuestions,
         shuffleOptions,
+        selfPaced,
+        enableTeams,
+        teamCount,
         channelUrl: channelUrl.trim() ? channelUrl.trim() : null,
         questions: questions.map((question, index) => {
           const filteredOptions = question.options
@@ -440,6 +448,9 @@ const CreateQuizView = ({ onExit, quizId: editQuizId }: CreateQuizViewProps) => 
         setEnablePodium((quiz as { enablePodium?: boolean })?.enablePodium ?? true);
         setShuffleQuestions((quiz as { shuffleQuestions?: boolean })?.shuffleQuestions ?? false);
         setShuffleOptions((quiz as { shuffleOptions?: boolean })?.shuffleOptions ?? false);
+        setSelfPaced((quiz as { selfPaced?: boolean })?.selfPaced ?? false);
+        setEnableTeams((quiz as { enableTeams?: boolean })?.enableTeams ?? false);
+        setTeamCount((quiz as { teamCount?: number })?.teamCount ?? 2);
         setQuestions(
           rawQuestions.length > 0
             ? rawQuestions.map((q: QuizQuestion & { correctIndex?: number; explanation?: string; questionType?: string }) => ({
@@ -996,6 +1007,8 @@ const CreateQuizView = ({ onExit, quizId: editQuizId }: CreateQuizViewProps) => 
                       { label: "Подиум ТОП-3", desc: "Церемония победителей в конце", value: enablePodium, set: setEnablePodium },
                       { label: "Шаффл вопросов", desc: "Случайный порядок вопросов", value: shuffleQuestions, set: setShuffleQuestions },
                       { label: "Шаффл ответов", desc: "Случайный порядок вариантов", value: shuffleOptions, set: setShuffleOptions },
+                      { label: "Свой темп", desc: "Игроки не видят ответы друг друга", value: selfPaced, set: setSelfPaced },
+                      { label: "Команды", desc: "Распределение игроков по командам", value: enableTeams, set: setEnableTeams },
                     ].map((s) => (
                       <label key={s.label} className="flex items-center justify-between p-3 rounded-xl bg-white/5 border border-white/10 cursor-pointer hover:border-white/20 transition-colors">
                         <div>
@@ -1008,6 +1021,29 @@ const CreateQuizView = ({ onExit, quizId: editQuizId }: CreateQuizViewProps) => 
                         </div>
                       </label>
                     ))}
+                    {enableTeams && (
+                      <div className="flex items-center justify-between p-3 rounded-xl bg-white/5 border border-white/10">
+                        <div>
+                          <div className="text-sm font-bold">Количество команд</div>
+                          <div className="text-[10px] text-white/40">От 2 до 8 команд</div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => setTeamCount(Math.max(2, teamCount - 1))}
+                            className="w-8 h-8 rounded-lg bg-white/10 text-white font-bold text-sm flex items-center justify-center hover:bg-white/20 transition-colors"
+                          >
+                            -
+                          </button>
+                          <span className="text-sm font-black w-6 text-center">{teamCount}</span>
+                          <button
+                            onClick={() => setTeamCount(Math.min(8, teamCount + 1))}
+                            className="w-8 h-8 rounded-lg bg-white/10 text-white font-bold text-sm flex items-center justify-center hover:bg-white/20 transition-colors"
+                          >
+                            +
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -1182,8 +1218,49 @@ const CreateQuizView = ({ onExit, quizId: editQuizId }: CreateQuizViewProps) => 
                     />
                   </div>
 
+                  <div className="flex gap-2 mb-3">
+                    {[
+                      { value: "multiple_choice", label: "Варианты" },
+                      { value: "true_false", label: "Да/Нет" },
+                      { value: "word_cloud", label: "Облако слов" },
+                    ].map((t) => (
+                      <button
+                        key={t.value}
+                        onClick={() => {
+                          const updated = [...questions];
+                          updated[activeQuestionIndex] = {
+                            ...updated[activeQuestionIndex],
+                            questionType: t.value,
+                            options: t.value === "true_false" ? ["Правда", "Ложь", "", ""] : t.value === "word_cloud" ? ["", "", "", ""] : updated[activeQuestionIndex].options,
+                            correctIndex: t.value === "true_false" ? 0 : t.value === "word_cloud" ? 0 : updated[activeQuestionIndex].correctIndex,
+                          };
+                          setQuestions(updated);
+                        }}
+                        className={cn(
+                          "px-3 py-1.5 rounded-xl text-xs font-bold transition-all border",
+                          activeQuestion.questionType === t.value
+                            ? "bg-primary/20 border-primary/40 text-primary"
+                            : "bg-white/5 border-white/10 text-white/50 hover:border-white/20"
+                        )}
+                      >
+                        {t.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {activeQuestion.questionType === "word_cloud" ? (
+                    <div className="p-4 rounded-xl bg-white/5 border border-white/10 text-center">
+                      <div className="text-sm text-white/40">Для этого типа вопроса варианты ответов не нужны.</div>
+                      <div className="text-xs text-white/30 mt-1">Игроки вводят слова в свободной форме.</div>
+                    </div>
+                  ) : (
+                  <>
                   <div className="grid gap-3">
-                    {activeQuestion.options.map((opt, index) => (
+                    {activeQuestion.options.map((opt, index) => {
+                      if (activeQuestion.questionType === "true_false" && index >= 2) {
+                        return null;
+                      }
+                      return (
                       <div key={index} className="flex items-center gap-3">
                         <button
                           type="button"
@@ -1217,7 +1294,8 @@ const CreateQuizView = ({ onExit, quizId: editQuizId }: CreateQuizViewProps) => 
                           }
                         />
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                   {activeQuestion.requiresSubscription && (
                     <p className="text-[10px] font-medium opacity-50">
@@ -1268,6 +1346,8 @@ const CreateQuizView = ({ onExit, quizId: editQuizId }: CreateQuizViewProps) => 
                       </div>
                     </button>
                   </div>
+                  </>
+                  )}
                   {enableExplanations && (
                     <div className="mt-4">
                       <label className="text-[10px] font-bold uppercase tracking-widest text-white/40 block mb-1">

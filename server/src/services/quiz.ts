@@ -78,12 +78,13 @@ const validateQuizInput = (input: CreateQuizInput) => {
     const options = trimmedOptions.filter((option) => option.length > 0);
     const isSubscriptionGate =
       question.requiresSubscription && options.length === 0;
-    if (!isSubscriptionGate && (options.length < 2 || options.length > 4)) {
+    const isWordCloud = question.questionType === "word_cloud";
+    if (!isSubscriptionGate && !isWordCloud && (options.length < 2 || options.length > 4)) {
       throw new ValidationError(
         `Вопрос ${index + 1}: нужно от 2 до 4 вариантов`,
       );
     }
-    if (!isSubscriptionGate && (question.correctIndex < 0 || question.correctIndex >= options.length)) {
+    if (!isSubscriptionGate && !isWordCloud && (question.correctIndex < 0 || question.correctIndex >= options.length)) {
       throw new ValidationError(`Вопрос ${index + 1}: неверный правильный ответ`);
     }
   });

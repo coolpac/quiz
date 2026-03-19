@@ -247,7 +247,7 @@ router.post("/:id/start", async (req, res) => {
 
   const quiz = await prisma.quiz.findUnique({
     where: { id },
-    select: { expiresAt: true, waitForAdminStart: true, startedByAdminAt: true },
+    select: { expiresAt: true, waitForAdminStart: true, startedByAdminAt: true, enableTeams: true, teamCount: true },
   });
   if (!quiz) {
     res.status(404).json({ error: "Quiz not found" });
@@ -268,6 +268,15 @@ router.post("/:id/start", async (req, res) => {
     return;
   }
 
+  // Calculate team assignment if teams are enabled
+  let teamIndex: number | null = null;
+  if (quiz.enableTeams && quiz.teamCount && quiz.teamCount > 0) {
+    const attemptCount = await prisma.quizAttempt.count({
+      where: { quizId: id, isFirstAttempt: true },
+    });
+    teamIndex = attemptCount % quiz.teamCount;
+  }
+
   const existingAttempt = await prisma.quizAttempt.findFirst({
     where: {
       quizId: id,
@@ -283,6 +292,7 @@ router.post("/:id/start", async (req, res) => {
     res.json({
       attemptId: existingAttempt.id,
       isFirstAttempt: existingAttempt.isFirstAttempt,
+      teamIndex,
     });
     return;
   }
@@ -307,7 +317,7 @@ router.post("/:id/start", async (req, res) => {
     markLeaderboardDirty(id, visitor.id);
   }
 
-  res.json({ attemptId: attempt.id, isFirstAttempt: attempt.isFirstAttempt });
+  res.json({ attemptId: attempt.id, isFirstAttempt: attempt.isFirstAttempt, teamIndex });
 });
 
 router.post("/:id/answer", answerLimiter, async (req, res) => {
@@ -352,7 +362,7 @@ router.post("/:id/answer", answerLimiter, async (req, res) => {
 
   const quiz = await prisma.quiz.findUnique({
     where: { id },
-    select: { expiresAt: true, timePerQuestion: true },
+    select: { expiresAt: true, timePerQuestion: true, selfPaced: true },
   });
   if (!quiz) {
     res.status(404).json({ error: "Quiz not found" });
@@ -447,16 +457,30 @@ router.post("/:id/answer", answerLimiter, async (req, res) => {
   if (attempt.isFirstAttempt) {
     const playerName = visitor.username ? `@${visitor.username}` : visitor.firstName;
     const avatarUrl = await getTelegramAvatarUrl(visitor.telegramId);
-    emitAnswerEvents({
-      quizId: id,
-      questionIndex: parsedQuestionIndex,
-      answerIndex: parsedAnswerIndex,
-      isCorrect,
-      score,
-      visitorId: visitor.id,
-      playerName,
-      avatarUrl,
-    });
+    if (!quiz.selfPaced) {
+      emitAnswerEvents({
+        quizId: id,
+        questionIndex: parsedQuestionIndex,
+        answerIndex: parsedAnswerIndex,
+        isCorrect,
+        score,
+        visitorId: visitor.id,
+        playerName,
+        avatarUrl,
+      });
+    } else {
+      // Self-paced: only emit to admin room, not to quiz room
+      const io = getIO();
+      io.to(adminRoom(id)).emit("admin:answer", {
+        playerName,
+        avatarUrl: avatarUrl ?? null,
+        questionIndex: parsedQuestionIndex,
+        answerIndex: parsedAnswerIndex,
+        isCorrect,
+        score,
+        timestamp: new Date(),
+      });
+    }
     markLeaderboardDirty(id, visitor.id);
   }
 
@@ -931,6 +955,85 @@ router.delete("/:id", adminOnly, async (req, res) => {
   io.in(quizRoom(id)).disconnectSockets(true);
 
   res.json({ success: true });
+});
+
+router.get("/:id/export-csv", adminOnly, async (req, res) => {
+  const id = getRouteId(req.params.id);
+  const visitor = req.visitor;
+
+  if (!id || !visitor) {
+    res.status(400).json({ error: "Invalid request" });
+    return;
+  }
+
+  const quiz = await prisma.quiz.findUnique({
+    where: { id },
+    select: { creatorId: true, title: true },
+  });
+
+  if (!quiz || quiz.creatorId !== visitor.id) {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+
+  const attempts = await prisma.quizAttempt.findMany({
+    where: { quizId: id, completedAt: { not: null } },
+    include: {
+      visitor: { select: { firstName: true, username: true } },
+      answers: {
+        include: { question: { select: { text: true, order: true } } },
+        orderBy: { answeredAt: "asc" },
+      },
+    },
+    orderBy: { totalScore: "desc" },
+  });
+
+  const questions = await prisma.question.findMany({
+    where: { quizId: id },
+    orderBy: { order: "asc" },
+    select: { text: true, order: true },
+  });
+
+  // Build CSV
+  const headers = [
+    "Игрок",
+    "Очки",
+    "Правильных",
+    "Всего вопросов",
+    "Точность %",
+    "Первая попытка",
+    ...questions.map((q) => `Q${q.order + 1}: ${q.text.slice(0, 50)}`),
+  ];
+
+  const rows = attempts.map((a) => {
+    const name = a.visitor.username ? `@${a.visitor.username}` : a.visitor.firstName;
+    const accuracy = a.totalQuestions > 0 ? Math.round((a.correctCount / a.totalQuestions) * 100) : 0;
+    const answersByOrder = new Map(a.answers.map((ans) => [ans.question.order, ans]));
+
+    return [
+      name,
+      String(a.totalScore),
+      String(a.correctCount),
+      String(a.totalQuestions),
+      `${accuracy}%`,
+      a.isFirstAttempt ? "Да" : "Нет",
+      ...questions.map((q) => {
+        const ans = answersByOrder.get(q.order);
+        if (!ans) return "-";
+        return ans.isCorrect ? "\u2713" : "\u2717";
+      }),
+    ];
+  });
+
+  const csvContent = [
+    headers.join(","),
+    ...rows.map((row) => row.map((cell) => `"${cell.replace(/"/g, '""')}"`).join(",")),
+  ].join("\n");
+
+  const bom = "\uFEFF"; // UTF-8 BOM for Excel compatibility
+  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader("Content-Disposition", `attachment; filename="${quiz.title.replace(/[^a-zA-Zа-яА-Я0-9]/g, "_")}_results.csv"`);
+  res.send(bom + csvContent);
 });
 
 router.get("/:id/stats", async (req, res) => {

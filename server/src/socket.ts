@@ -90,6 +90,21 @@ export const initSocket = async (server: HttpServer) => {
       },
     );
 
+    socket.on("wordcloud:submit", (payload: { quizId: string; questionIndex: number; word: string }) => {
+      if (!payload.word || typeof payload.word !== "string" || payload.word.length > 30) return;
+      if (!payload.quizId || typeof payload.questionIndex !== "number") return;
+      const word = payload.word.trim().toLowerCase();
+      if (!word) return;
+      io.to(quizRoom(payload.quizId)).emit("wordcloud:word", {
+        questionIndex: payload.questionIndex,
+        word,
+      });
+      io.to(adminRoom(payload.quizId)).emit("wordcloud:word", {
+        questionIndex: payload.questionIndex,
+        word,
+      });
+    });
+
     socket.on("disconnecting", () => {
       for (const room of socket.rooms) {
         if (!room.startsWith("quiz:")) {

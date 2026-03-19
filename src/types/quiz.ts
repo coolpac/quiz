@@ -6,6 +6,7 @@ export type QuizQuestion = {
   media?: { type: "image" | "video"; url: string };
   requiresSubscription?: boolean;
   channelUrl?: string;
+  questionType?: string;
 };
 
 export type QuizData = {
@@ -19,6 +20,11 @@ export type QuizData = {
   enableExplanations?: boolean;
   enablePodium?: boolean;
   questions: QuizQuestion[];
+  shuffleQuestions?: boolean;
+  shuffleOptions?: boolean;
+  selfPaced?: boolean;
+  enableTeams?: boolean;
+  teamCount?: number;
 };
 
 export type QuizResults = {
