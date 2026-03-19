@@ -36,6 +36,36 @@ import { adminRoom, getIO, quizRoom } from "../socketState";
 
 const router = Router();
 
+// Public endpoint — no auth required
+router.get("/active", async (_req, res) => {
+  const now = new Date();
+  const quizzes = await prisma.quiz.findMany({
+    where: { isActive: true, isPublic: true, expiresAt: { gt: now } },
+    include: {
+      _count: {
+        select: {
+          questions: true,
+          attempts: { where: { isFirstAttempt: true } },
+        },
+      },
+    },
+    orderBy: { createdAt: "desc" },
+    take: 20,
+  });
+
+  res.json({
+    quizzes: quizzes.map((quiz) => ({
+      id: quiz.id,
+      title: quiz.title,
+      category: quiz.category,
+      difficulty: quiz.difficulty,
+      questionsCount: quiz._count.questions,
+      playersCount: quiz._count.attempts,
+      timePerQuestion: quiz.timePerQuestion,
+    })),
+  });
+});
+
 router.use(validateTelegramInitData);
 
 const getRouteId = (value: string | string[] | undefined) => {
@@ -110,35 +140,6 @@ router.get("/my", adminOnly, async (req, res) => {
       deepLink: botUsername
         ? `https://t.me/${botUsername}?start=${quiz.id}`
         : null,
-    })),
-  });
-});
-
-router.get("/active", async (_req, res) => {
-  const now = new Date();
-  const quizzes = await prisma.quiz.findMany({
-    where: { isActive: true, isPublic: true, expiresAt: { gt: now } },
-    include: {
-      _count: {
-        select: {
-          questions: true,
-          attempts: { where: { isFirstAttempt: true } },
-        },
-      },
-    },
-    orderBy: { createdAt: "desc" },
-    take: 20,
-  });
-
-  res.json({
-    quizzes: quizzes.map((quiz) => ({
-      id: quiz.id,
-      title: quiz.title,
-      category: quiz.category,
-      difficulty: quiz.difficulty,
-      questionsCount: quiz._count.questions,
-      playersCount: quiz._count.attempts,
-      timePerQuestion: quiz.timePerQuestion,
     })),
   });
 });
