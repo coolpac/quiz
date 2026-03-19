@@ -7,6 +7,7 @@ import {
   Crown,
   Eye,
   ExternalLink,
+  PlayCircle,
   LayoutDashboard,
   List,
   LogOut,
@@ -25,6 +26,7 @@ import {
   Users,
   X,
   XCircle,
+  Power,
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { api } from "../api";
@@ -63,6 +65,8 @@ type MyQuizItem = {
 
 type DashboardStats = {
   totalGames: number;
+  totalAttempts?: number;
+  totalQuizzes?: number;
   activeQuizzes: number;
   totalPlayers: number;
   topQuizzes: Array<{
@@ -88,16 +92,29 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
   const [adminStatsByQuestion, setAdminStatsByQuestion] = useState<
     Record<number, number[]>
   >({});
+  const [adminTotalByQuestion, setAdminTotalByQuestion] = useState<
+    Record<number, number>
+  >({});
   const [adminActiveQuestionIndex, setAdminActiveQuestionIndex] = useState(0);
   const [adminToken, setAdminToken] = useState("");
   const [adminTokenInput, setAdminTokenInput] = useState("");
   const [adminAuthError, setAdminAuthError] = useState<string | null>(null);
+  const [canStartByAdmin, setCanStartByAdmin] = useState(true);
+  const [isStartingQuiz, setIsStartingQuiz] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [userAvatarUrl, setUserAvatarUrl] = useState<string | null>(null);
+  const [userFirstName, setUserFirstName] = useState<string>("Admin");
   const { pushToast } = useToast();
 
   const adminCurrentQuestion = adminQuiz?.questions[adminActiveQuestionIndex];
   const adminQuestionStats =
     adminStatsByQuestion[adminActiveQuestionIndex] ?? [0, 0, 0, 0];
+  const adminQuestionTotal =
+    adminTotalByQuestion[adminActiveQuestionIndex] ?? 0;
+  const adminCorrectIndex =
+    typeof adminCurrentQuestion?.correctIndex === "number"
+      ? adminCurrentQuestion.correctIndex
+      : null;
   const activeQuizMeta = useMemo(
     () => myQuizzes.find((quiz) => quiz.id === selectedQuizId) ?? null,
     [myQuizzes, selectedQuizId],
@@ -128,6 +145,22 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
   useEffect(() => {
     void refreshMyQuizzes();
   }, [refreshMyQuizzes]);
+
+  useEffect(() => {
+    api
+      .getMe()
+      .then((data) => {
+        if (data?.avatarUrl) {
+          setUserAvatarUrl(data.avatarUrl);
+        }
+        if (data?.firstName) {
+          setUserFirstName(data.firstName);
+        }
+      })
+      .catch(() => {
+        // Ignore errors, use defaults
+      });
+  }, []);
 
   useEffect(() => {
     const handleRefresh = () => {
@@ -162,6 +195,7 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
     setAdminAnswers([]);
     setAdminTopPlayers([]);
     setAdminStatsByQuestion({});
+    setAdminTotalByQuestion({});
     setAdminActiveQuestionIndex(0);
     setLivePlayers(0);
     setAdminQuiz(null);
@@ -196,6 +230,8 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
       .then((data) => {
         if (data?.quiz) {
           setAdminQuiz(data.quiz);
+          const q = data.quiz as { waitForAdminStart?: boolean; canStart?: boolean };
+          setCanStartByAdmin(q.waitForAdminStart === true && q.canStart !== true ? false : true);
         }
       })
       .catch(() => {
@@ -206,15 +242,25 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
       .getStats(selectedQuizId)
       .then((data) => {
         const map: Record<number, number[]> = {};
+        const totalMap: Record<number, number> = {};
         (data?.questions ?? []).forEach(
-          (entry: { questionIndex: number; stats: number[] }) => {
+          (entry: {
+            questionIndex: number;
+            stats: number[];
+            totalAnswers?: number;
+          }) => {
             map[entry.questionIndex] = entry.stats ?? [0, 0, 0, 0];
+            if (typeof entry.totalAnswers === "number") {
+              totalMap[entry.questionIndex] = entry.totalAnswers;
+            }
           },
         );
         setAdminStatsByQuestion(map);
+        setAdminTotalByQuestion(totalMap);
       })
       .catch(() => {
         setAdminStatsByQuestion({});
+        setAdminTotalByQuestion({});
       });
 
     api
@@ -245,7 +291,6 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
       score: number;
       timestamp: string | Date;
     }) => {
-      setAdminActiveQuestionIndex(payload.questionIndex);
       setAdminAnswers((prev) => {
         const nextItem: AdminAnswerItem = {
           playerName: payload.playerName,
@@ -256,19 +301,26 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
           score: payload.score,
           timestamp: new Date(payload.timestamp),
         };
-        return [nextItem, ...prev].slice(0, 8);
+        return [nextItem, ...prev].slice(0, 50);
       });
     };
 
     const handleStatsUpdated = (payload: {
       questionIndex: number;
       stats: number[];
+      totalAnswers?: number;
     }) => {
-      setAdminActiveQuestionIndex(payload.questionIndex);
       setAdminStatsByQuestion((prev) => ({
         ...prev,
         [payload.questionIndex]: payload.stats ?? [0, 0, 0, 0],
       }));
+      if (typeof payload.totalAnswers === "number") {
+        setAdminTotalByQuestion((prev) => {
+          const next = { ...prev };
+          next[payload.questionIndex] = payload.totalAnswers!;
+          return next;
+        });
+      }
     };
 
     const handleSubscription = (payload: {
@@ -296,7 +348,21 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
       }
     };
 
+    const handleQuizStarted = () => {
+      setCanStartByAdmin(true);
+    };
+
+    const handleQuizReset = () => {
+      setCanStartByAdmin(false);
+      setAdminAnswers([]);
+      setAdminStatsByQuestion({});
+      setAdminTotalByQuestion({});
+      setAdminTopPlayers([]);
+    };
+
     socket.on("players:count", handlePlayersCount);
+    socket.on("quiz:started", handleQuizStarted);
+    socket.on("quiz:reset", handleQuizReset);
     socket.on("admin:answer", handleAdminAnswer);
     socket.on("admin:subscription", handleSubscription);
     socket.on("stats:updated", handleStatsUpdated);
@@ -307,6 +373,8 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
 
     return () => {
       socket.off("players:count", handlePlayersCount);
+      socket.off("quiz:started", handleQuizStarted);
+      socket.off("quiz:reset", handleQuizReset);
       socket.off("admin:answer", handleAdminAnswer);
       socket.off("admin:subscription", handleSubscription);
       socket.off("stats:updated", handleStatsUpdated);
@@ -316,10 +384,8 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
     };
   }, [adminToken, selectedQuizId]);
 
-  useEffect(() => {
-    if (activeTab !== "dashboard") {
-      return;
-    }
+  const refreshDashboardStats = useCallback(() => {
+    if (activeTab !== "dashboard") return;
     setDashboardLoading(true);
     api
       .getDashboardStats()
@@ -333,6 +399,13 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
         setDashboardLoading(false);
       });
   }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab !== "dashboard") {
+      return;
+    }
+    refreshDashboardStats();
+  }, [activeTab, refreshDashboardStats]);
 
   const formattedDate = useMemo(
     () =>
@@ -351,7 +424,7 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
 
   if (!selectedQuizId) {
     return (
-      <div className="admin-shell min-h-screen bg-background text-foreground flex items-center justify-center p-4 sm:p-6">
+      <div className="admin-shell min-h-screen bg-background text-foreground flex items-center justify-center p-4 sm:p-6 pt-[max(env(safe-area-inset-top,0px),52px)] md:pt-4">
         <div className="w-full max-w-2xl p-6 sm:p-10 rounded-2xl sm:rounded-[2.5rem] bg-white/5 border border-white/10 space-y-6">
           <div className="space-y-2">
             <h3 className="text-2xl sm:text-3xl font-black">
@@ -387,8 +460,8 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
                         {quiz.category} • {quiz.questionsCount} вопросов
                       </div>
                     </div>
-                    <Badge variant={quiz.isExpired ? "default" : "success"}>
-                      {quiz.isExpired ? "Expired" : "Live"}
+                    <Badge variant={quiz.isExpired ? "default" : quiz.isActive ? "success" : "default"}>
+                      {quiz.isExpired ? "Завершён" : quiz.isActive ? "Активен" : "Неактивен"}
                     </Badge>
                   </div>
                   <div className="mt-3 text-[10px] font-bold uppercase tracking-widest text-white/40">
@@ -417,7 +490,7 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
   }
 
   return (
-    <div className="admin-shell min-h-screen bg-background text-foreground flex overflow-x-hidden relative">
+    <div className="admin-shell min-h-screen bg-background text-foreground flex overflow-x-hidden relative pt-[max(env(safe-area-inset-top,0px),52px)] md:pt-0">
       {/* Mobile Sidebar Overlay */}
       <AnimatePresence>
         {isMobileMenuOpen && (
@@ -434,17 +507,17 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
       {/* Sidebar (Desktop & Mobile) */}
       <div
         className={cn(
-          "fx-backdrop fixed md:relative inset-y-0 left-0 z-[101] w-72 md:w-64 border-r border-white/10 flex flex-col p-6 gap-8 bg-black/90 md:bg-black/20 backdrop-blur-xl transition-transform duration-300 md:translate-x-0",
+          "fx-backdrop fixed md:relative inset-y-0 left-0 z-[101] w-72 md:w-64 border-r border-white/10 flex flex-col pt-[max(env(safe-area-inset-top,0px),52px)] md:pt-6 p-6 gap-8 bg-black/90 md:bg-black/20 backdrop-blur-xl transition-transform duration-300 md:translate-x-0",
           isMobileMenuOpen ? "translate-x-0" : "-translate-x-full",
         )}
       >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-primary flex items-center justify-center font-black shadow-lg shadow-primary/20">
-              S
+            <div className="w-10 h-10 rounded-2xl bg-primary flex items-center justify-center font-black shadow-lg shadow-primary/20 text-lg">
+              К
             </div>
             <span className="font-black text-xl">
-              SUPER<span className="text-primary">ADMIN</span>
+              Кибер <span className="text-primary">Слон</span>
             </span>
           </div>
           <button
@@ -524,17 +597,33 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
 
           <div className="flex items-center gap-3 md:gap-6">
             <div className="hidden sm:flex flex-col items-end">
-              <span className="text-sm font-bold">Admin</span>
+              <span className="text-sm font-bold truncate max-w-[120px]">{userFirstName}</span>
               <span className="text-[10px] text-primary font-bold uppercase tracking-widest">
                 Online
               </span>
             </div>
-            <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl md:rounded-2xl bg-gradient-to-br from-primary to-purple-600 border border-white/10 p-0.5">
+            <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl md:rounded-2xl bg-gradient-to-br from-primary to-purple-600 border border-white/10 p-0.5 shrink-0">
               <div className="w-full h-full rounded-[0.6rem] md:rounded-[0.9rem] bg-black overflow-hidden">
-                <img
-                  src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix"
-                  alt="avatar"
-                />
+                {userAvatarUrl ? (
+                  <img
+                    src={userAvatarUrl}
+                    alt={userFirstName}
+                    className="w-full h-full object-cover"
+                    loading="lazy"
+                    onError={(e) => {
+                      // Fallback to gradient if image fails to load
+                      const target = e.target as HTMLImageElement;
+                      target.style.display = "none";
+                      if (target.parentElement) {
+                        target.parentElement.className = "w-full h-full rounded-[0.6rem] md:rounded-[0.9rem] bg-gradient-to-br from-primary to-purple-500";
+                      }
+                    }}
+                  />
+                ) : (
+                  <div className="w-full h-full rounded-[0.6rem] md:rounded-[0.9rem] bg-gradient-to-br from-primary to-purple-500 flex items-center justify-center text-white font-black text-lg">
+                    {userFirstName.charAt(0).toUpperCase()}
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -616,20 +705,38 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
                 exit={{ opacity: 0, y: -20 }}
                 className="space-y-8"
               >
+                <div className="flex items-center justify-between gap-4">
+                  <h3 className="text-lg font-black">Статистика</h3>
+                  <Button
+                    variant="glass"
+                    size="sm"
+                    onClick={() => {
+                      hapticSelection();
+                      refreshDashboardStats();
+                    }}
+                    disabled={dashboardLoading}
+                  >
+                    <RotateCcw className={cn("w-4 h-4 mr-2", dashboardLoading && "animate-spin")} />
+                    Обновить
+                  </Button>
+                </div>
                 <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6">
                   {[
                     {
-                      label: "Игр",
+                      label: "Сыграно партий",
                       val: dashboardStats?.totalGames ?? "—",
                       icon: Play,
                       color: "text-blue-400",
                     },
                     {
                       label: "Квизов",
-                      val: dashboardStats?.activeQuizzes ?? "—",
+                      sublabel: dashboardStats?.activeQuizzes != null
+                        ? `активных: ${dashboardStats.activeQuizzes}`
+                        : undefined,
+                      val: dashboardStats?.totalQuizzes ?? dashboardStats?.activeQuizzes ?? "—",
                       icon: Activity,
                       color: "text-green-400",
-                      live: true,
+                      live: (dashboardStats?.activeQuizzes ?? 0) > 0,
                     },
                     {
                       label: "Игроков",
@@ -656,6 +763,11 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
                         {stat.label}
                       </div>
                       <div className="text-xl md:text-3xl font-black">{stat.val}</div>
+                      {"sublabel" in stat && stat.sublabel && (
+                        <div className="text-[9px] md:text-[10px] font-medium text-white/40 mt-1">
+                          {stat.sublabel}
+                        </div>
+                      )}
                       {stat.live && (
                         <div className="absolute top-4 right-4 md:top-6 md:right-6 flex h-1.5 w-1.5 md:h-2 md:w-2">
                           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
@@ -779,11 +891,14 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
                     <motion.div
                       key={quiz.id}
                       whileHover={{ y: -5 }}
-                      className="p-4 sm:p-8 rounded-2xl sm:rounded-[2.5rem] bg-white/5 border border-white/10 hover:border-primary/30 transition-all relative overflow-hidden group"
+                      className={cn(
+                        "p-4 sm:p-8 rounded-2xl sm:rounded-[2.5rem] bg-white/5 border border-white/10 hover:border-primary/30 transition-all relative overflow-hidden group",
+                        !quiz.isActive && !quiz.isExpired && "opacity-60"
+                      )}
                     >
                       <div className="absolute top-0 right-0 p-4 sm:p-6">
-                        <Badge variant={quiz.isExpired ? "default" : "success"}>
-                          {quiz.isExpired ? "Expired" : "Live"}
+                        <Badge variant={quiz.isExpired ? "default" : quiz.isActive ? "success" : "default"}>
+                          {quiz.isExpired ? "Завершён" : quiz.isActive ? "Активен" : "Неактивен"}
                         </Badge>
                       </div>
                       <div className="space-y-4">
@@ -800,6 +915,36 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
                           </div>
                         </div>
                         <div className="flex flex-col gap-2 pt-4">
+                          <Button
+                            size="sm"
+                            variant="glass"
+                            className={cn(
+                              "w-full",
+                              quiz.isActive
+                                ? "text-orange-400 hover:text-orange-500 hover:bg-orange-500/10 border-orange-500/20"
+                                : "text-green-400 hover:text-green-500 hover:bg-green-500/10 border-green-500/20"
+                            )}
+                            onClick={async () => {
+                              hapticSelection();
+                              try {
+                                const result = await api.toggleQuizActive(quiz.id);
+                                pushToast(
+                                  result.isActive ? "Квиз активирован" : "Квиз деактивирован",
+                                  "success"
+                                );
+                                void refreshMyQuizzes();
+                              } catch (error) {
+                                const message =
+                                  error instanceof Error && error.message
+                                    ? error.message
+                                    : "Не удалось изменить статус";
+                                pushToast(message, "error");
+                              }
+                            }}
+                          >
+                            <Power size={14} className="mr-1" />
+                            {quiz.isActive ? "Деактивировать" : "Активировать"}
+                          </Button>
                           <div className="flex gap-2">
                             <Button
                               size="sm"
@@ -1024,6 +1169,34 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
                 className="space-y-8"
               >
                 <div className="flex flex-col sm:flex-row gap-3 md:gap-4">
+                  {!canStartByAdmin && adminToken && (
+                    <Button
+                      className="flex-1 py-6 text-lg font-black gap-3 bg-gradient-to-r from-primary to-purple-600 shadow-lg shadow-primary/30 hover:shadow-primary/50"
+                      disabled={isStartingQuiz}
+                      onClick={async () => {
+                        hapticSelection();
+                        if (!selectedQuizId || isStartingQuiz) return;
+                        setIsStartingQuiz(true);
+                        try {
+                          await api.adminStartQuiz(selectedQuizId, adminToken);
+                          setCanStartByAdmin(true);
+                          pushToast("Квиз запущен! Все игроки могут начать", "success");
+                        } catch (e) {
+                          const msg = e instanceof Error ? e.message : "Не удалось запустить";
+                          pushToast(msg, "error");
+                        } finally {
+                          setIsStartingQuiz(false);
+                        }
+                      }}
+                    >
+                      {isStartingQuiz ? (
+                        <RotateCcw size={22} className="animate-spin" />
+                      ) : (
+                        <PlayCircle size={22} />
+                      )}
+                      Старт для всех
+                    </Button>
+                  )}
                   <div className="flex-1 p-4 md:p-6 rounded-2xl md:rounded-3xl bg-primary/10 border border-primary/20 backdrop-blur-md flex items-center justify-between">
                     <div className="min-w-0">
                       <div className="text-[10px] font-bold text-primary uppercase tracking-widest mb-1">
@@ -1060,11 +1233,51 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
                         <h3 className="text-lg md:text-xl font-black flex items-center gap-3">
                           <BarChart3 className="text-primary" /> Ответы
                         </h3>
-                        <Badge variant="default" className="text-[10px]">
-                          Вопрос{" "}
-                          {adminQuiz ? adminActiveQuestionIndex + 1 : "—"}/
-                          {adminQuiz?.questions.length ?? "—"}
-                        </Badge>
+                        {adminQuiz && adminQuiz.questions.length > 1 && (
+                          <div className="flex flex-wrap gap-1.5">
+                            {adminQuiz.questions.map((_, i) => {
+                              const total =
+                                adminTotalByQuestion[i] ?? 0;
+                              const correctIdx =
+                                adminQuiz.questions[i]?.correctIndex;
+                              const stats =
+                                adminStatsByQuestion[i] ?? [];
+                              const correctPct =
+                                typeof correctIdx === "number"
+                                  ? stats[correctIdx] ?? 0
+                                  : null;
+                              return (
+                                <button
+                                  key={i}
+                                  onClick={() => {
+                                    hapticSelection();
+                                    setAdminActiveQuestionIndex(i);
+                                  }}
+                                  className={cn(
+                                    "px-2.5 py-1 rounded-lg text-[10px] font-bold transition-colors flex items-center gap-1",
+                                    adminActiveQuestionIndex === i
+                                      ? "bg-primary text-white"
+                                      : "bg-white/10 text-white/60 hover:bg-white/20",
+                                  )}
+                                  title={`Ответов: ${total}${correctPct != null ? `, верно: ${correctPct}%` : ""}`}
+                                >
+                                  {i + 1}
+                                  {total > 0 && (
+                                    <span
+                                      className={cn(
+                                        "opacity-70",
+                                        adminActiveQuestionIndex === i &&
+                                          "opacity-90",
+                                      )}
+                                    >
+                                      ({total})
+                                    </span>
+                                  )}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
 
                       <div className="space-y-6 md:space-y-8">
@@ -1075,22 +1288,77 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
                         )}
                         {adminCurrentQuestion && (
                           <div className="space-y-4 md:space-y-6">
+                            {(adminQuestionTotal > 0 || livePlayers > 0) && (
+                              <div className="flex items-center gap-2 text-xs font-bold text-white/50">
+                                <span>
+                                  Ответили: {adminQuestionTotal} из{" "}
+                                  {livePlayers || "—"} участников
+                                </span>
+                              </div>
+                            )}
                             <p className="text-base md:text-lg font-bold leading-tight">
                               {adminCurrentQuestion.question}
                             </p>
                             <div className="space-y-3 md:space-y-4">
                               {adminCurrentQuestion.options.map((opt, i) => {
-                                const value = adminQuestionStats[i] ?? 0;
+                                const pct = adminQuestionStats[i] ?? 0;
+                                const count =
+                                  adminQuestionTotal > 0
+                                    ? Math.round(
+                                        (pct / 100) * adminQuestionTotal,
+                                      )
+                                    : 0;
+                                const isCorrect =
+                                  adminCorrectIndex === i;
                                 return (
-                                  <div key={i} className="space-y-1.5 md:space-y-2">
-                                    <div className="flex justify-between text-xs md:text-sm font-bold">
-                                      <span className="text-white/60 truncate mr-4">{opt}</span>
-                                      <span className="shrink-0">{value}%</span>
+                                  <div
+                                    key={i}
+                                    className={cn(
+                                      "space-y-1.5 md:space-y-2 p-2 rounded-lg transition-colors",
+                                      isCorrect &&
+                                        "ring-2 ring-green-400/60 bg-green-500/10",
+                                    )}
+                                  >
+                                    <div className="flex justify-between text-xs md:text-sm font-bold items-center gap-2">
+                                      <span
+                                        className={cn(
+                                          "truncate flex-1",
+                                          isCorrect
+                                            ? "text-green-400"
+                                            : "text-white/60",
+                                        )}
+                                      >
+                                        {opt}
+                                        {isCorrect && (
+                                          <span className="ml-2 text-green-400">
+                                            ✓
+                                          </span>
+                                        )}
+                                      </span>
+                                      <span className="shrink-0 text-white/70">
+                                        {adminQuestionTotal > 0 ? (
+                                          <>
+                                            {count} из {adminQuestionTotal}{" "}
+                                            <span className="opacity-70">
+                                              ({pct}%)
+                                            </span>
+                                          </>
+                                        ) : (
+                                          <span className="opacity-70">
+                                            (0%)
+                                          </span>
+                                        )}
+                                      </span>
                                     </div>
                                     <div className="h-2 md:h-3 w-full bg-white/5 rounded-full overflow-hidden">
                                       <div
-                                        className="h-full rounded-full bg-primary/70 transition-[width] duration-500"
-                                        style={{ width: `${value}%` }}
+                                        className={cn(
+                                          "h-full rounded-full transition-[width] duration-500",
+                                          isCorrect
+                                            ? "bg-green-500/80"
+                                            : "bg-primary/70",
+                                        )}
+                                        style={{ width: `${pct}%` }}
                                       />
                                     </div>
                                   </div>
@@ -1102,60 +1370,88 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
 
                         <div className="space-y-3 pt-4 border-t border-white/5">
                           <div className="text-[10px] font-black uppercase tracking-widest text-white/40">
-                            Последние ответы
+                            Ответы по вопросу {adminActiveQuestionIndex + 1}
                           </div>
-                          {adminAnswers.length === 0 && (
-                            <div className="p-4 rounded-xl bg-white/5 border border-white/5 text-[10px] font-bold uppercase tracking-widest text-white/30 text-center">
-                              Нет ответов
-                            </div>
-                          )}
-                          <div className="space-y-2">
-                            {adminAnswers.map((item, index) => (
-                              <motion.div
-                                key={`${item.playerName}-${item.timestamp}-${index}`}
-                                initial={{ opacity: 0, y: 10 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                className="flex items-center justify-between p-3 md:p-4 rounded-xl md:rounded-2xl bg-white/5 border border-white/5"
-                              >
-                                <div className="flex items-center gap-3 md:gap-4 min-w-0">
-                                  {item.avatarUrl ? (
-                                    <img
-                                      src={item.avatarUrl}
-                                      alt={item.playerName}
-                                      className="w-8 h-8 md:w-10 md:h-10 rounded-full object-cover shrink-0"
-                                      loading="lazy"
-                                    />
-                                  ) : (
-                                    <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-gradient-to-br from-primary to-purple-500 shrink-0" />
-                                  )}
-                                  <div className="min-w-0">
-                                    <div className="font-bold text-xs md:text-sm truncate">
-                                      {item.playerName}
-                                    </div>
-                                    <div className="text-[9px] md:text-[10px] font-black uppercase tracking-widest text-white/40">
-                                      Вопр. {item.questionIndex + 1}
-                                    </div>
-                                  </div>
+                          {(() => {
+                            const filtered = adminAnswers.filter(
+                              (a) => a.questionIndex === adminActiveQuestionIndex,
+                            );
+                            const display = filtered.slice(0, 20);
+                            if (display.length === 0) {
+                              return (
+                                <div className="p-4 rounded-xl bg-white/5 border border-white/5 text-[10px] font-bold uppercase tracking-widest text-white/30 text-center">
+                                  Нет ответов по этому вопросу
                                 </div>
-                                <div className="text-right shrink-0 ml-3">
-                                  <div
-                                    className={cn(
-                                      "text-[10px] md:text-xs font-black uppercase",
-                                      item.isCorrect ? "text-green-400" : "text-red-400",
-                                    )}
-                                  >
-                                    {item.isCorrect ? `+${item.score}` : "0"}
-                                  </div>
-                                  <div className="text-[9px] font-bold opacity-30">
-                                    {item.timestamp.toLocaleTimeString([], {
-                                      hour: "2-digit",
-                                      minute: "2-digit",
-                                    })}
-                                  </div>
-                                </div>
-                              </motion.div>
-                            ))}
-                          </div>
+                              );
+                            }
+                            const optionLabels = ["A", "B", "C", "D", "E", "F"];
+                            return (
+                              <div className="space-y-2">
+                                {display.map((item, index) => {
+                                  const q = adminQuiz?.questions[item.questionIndex];
+                                  const optionText =
+                                    q?.options[item.answerIndex] ??
+                                    optionLabels[item.answerIndex] ??
+                                    `#${item.answerIndex + 1}`;
+                                  return (
+                                    <motion.div
+                                      key={`${item.playerName}-${item.timestamp}-${index}`}
+                                      initial={{ opacity: 0, y: 10 }}
+                                      animate={{ opacity: 1, y: 0 }}
+                                      className="flex items-center justify-between p-3 md:p-4 rounded-xl md:rounded-2xl bg-white/5 border border-white/5 gap-2"
+                                    >
+                                      <div className="flex items-center gap-3 md:gap-4 min-w-0 flex-1">
+                                        {item.avatarUrl ? (
+                                          <img
+                                            src={item.avatarUrl}
+                                            alt={item.playerName}
+                                            className="w-8 h-8 md:w-10 md:h-10 rounded-full object-cover shrink-0"
+                                            loading="lazy"
+                                          />
+                                        ) : (
+                                          <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-gradient-to-br from-primary to-purple-500 shrink-0" />
+                                        )}
+                                        <div className="min-w-0 flex-1">
+                                          <div className="font-bold text-xs md:text-sm truncate">
+                                            {item.playerName}
+                                          </div>
+                                          <div
+                                            className={cn(
+                                              "text-[10px] truncate",
+                                              item.isCorrect
+                                                ? "text-green-400"
+                                                : "text-red-400",
+                                            )}
+                                          >
+                                            выбрал: {optionText}
+                                          </div>
+                                        </div>
+                                      </div>
+                                      <div className="text-right shrink-0">
+                                        <div
+                                          className={cn(
+                                            "text-[10px] md:text-xs font-black",
+                                            item.isCorrect
+                                              ? "text-green-400"
+                                              : "text-red-400",
+                                          )}
+                                        >
+                                          {item.isCorrect ? `+${item.score}` : "—"}
+                                        </div>
+                                        <div className="text-[9px] font-bold opacity-40">
+                                          {item.timestamp.toLocaleTimeString([], {
+                                            hour: "2-digit",
+                                            minute: "2-digit",
+                                            second: "2-digit",
+                                          })}
+                                        </div>
+                                      </div>
+                                    </motion.div>
+                                  );
+                                })}
+                              </div>
+                            );
+                          })()}
                         </div>
                       </div>
                     </div>
@@ -1241,23 +1537,35 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
                             key={`${player.name}-${player.rank}`}
                             initial={{ opacity: 0, scale: 0.9 }}
                             animate={{ opacity: 1, scale: 1 }}
-                            className="flex items-center gap-3 md:gap-4 p-3 md:p-4 rounded-xl md:rounded-2xl bg-white/5 border border-white/5 hover:bg-white/10 transition-all"
+                            className={cn(
+                              "flex items-center gap-3 md:gap-4 p-3 md:p-4 rounded-xl md:rounded-2xl border transition-all",
+                              player.inProgress
+                                ? "bg-primary/5 border-primary/20"
+                                : "bg-white/5 border-white/5 hover:bg-white/10",
+                            )}
                           >
                             <div
                               className={cn(
                                 "w-7 h-7 md:w-8 md:h-8 rounded-lg md:rounded-xl flex items-center justify-center font-black text-[10px] md:text-xs shrink-0",
-                                i === 0 ? "bg-yellow-500 text-black" : "bg-white/10",
+                                i === 0 && !player.inProgress ? "bg-yellow-500 text-black" : "bg-white/10",
                               )}
                             >
                               {player.rank}
                             </div>
                             <div className="flex-1 min-w-0">
                               <div className="font-bold text-xs md:text-sm truncate">{player.name}</div>
-                              <div className="text-[9px] font-black text-green-400 uppercase">
-                                {i === 0 ? "Leader" : "Top"}
+                              <div
+                                className={cn(
+                                  "text-[9px] font-black uppercase",
+                                  player.inProgress ? "text-primary" : "text-green-400",
+                                )}
+                              >
+                                {player.inProgress ? "В процессе" : i === 0 ? "Leader" : "Top"}
                               </div>
                             </div>
-                            <div className="font-black text-xs md:text-sm shrink-0 ml-2">{player.score}</div>
+                            <div className="font-black text-xs md:text-sm shrink-0 ml-2">
+                              {player.inProgress ? `${player.score}…` : player.score}
+                            </div>
                           </motion.div>
                         ))}
                       </div>

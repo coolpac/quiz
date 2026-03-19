@@ -85,7 +85,12 @@ router.get("/my", adminOnly, async (req, res) => {
   const quizzes = await prisma.quiz.findMany({
     where: { creatorId: visitor.id },
     include: {
-      _count: { select: { questions: true, attempts: true } },
+      _count: {
+        select: {
+          questions: true,
+          attempts: { where: { isFirstAttempt: true } },
+        },
+      },
     },
     orderBy: { createdAt: "desc" },
   });
@@ -105,6 +110,35 @@ router.get("/my", adminOnly, async (req, res) => {
       deepLink: botUsername
         ? `https://t.me/${botUsername}?start=${quiz.id}`
         : null,
+    })),
+  });
+});
+
+router.get("/active", async (_req, res) => {
+  const now = new Date();
+  const quizzes = await prisma.quiz.findMany({
+    where: { isActive: true, isPublic: true, expiresAt: { gt: now } },
+    include: {
+      _count: {
+        select: {
+          questions: true,
+          attempts: { where: { isFirstAttempt: true } },
+        },
+      },
+    },
+    orderBy: { createdAt: "desc" },
+    take: 20,
+  });
+
+  res.json({
+    quizzes: quizzes.map((quiz) => ({
+      id: quiz.id,
+      title: quiz.title,
+      category: quiz.category,
+      difficulty: quiz.difficulty,
+      questionsCount: quiz._count.questions,
+      playersCount: quiz._count.attempts,
+      timePerQuestion: quiz.timePerQuestion,
     })),
   });
 });
@@ -149,16 +183,23 @@ router.get("/:id", async (req, res) => {
     where: { visitorId: visitor.id, quizId: id, isFirstAttempt: true },
   });
 
-  const questions = quiz.questions.map((question) => ({
-    id: question.id,
-    question: question.text,
-    options: question.options as string[],
-    media: question.mediaUrl
-      ? { type: question.mediaType, url: question.mediaUrl }
-      : undefined,
-    requiresSubscription: question.requiresSubscription,
-    channelUrl: question.requiresSubscription ? quiz.channelUrl ?? undefined : undefined,
-  }));
+  const isCreator = quiz.creatorId != null && quiz.creatorId === visitor.id;
+  const questions = quiz.questions.map((question) => {
+    const base = {
+      id: question.id,
+      question: question.text,
+      options: question.options as string[],
+      media: question.mediaUrl
+        ? { type: question.mediaType, url: question.mediaUrl }
+        : undefined,
+      requiresSubscription: question.requiresSubscription,
+      channelUrl: question.requiresSubscription ? quiz.channelUrl ?? undefined : undefined,
+    };
+    return isCreator ? { ...base, correctIndex: question.correctIndex } : base;
+  });
+
+  const canStart =
+    !quiz.waitForAdminStart || quiz.startedByAdminAt != null;
 
   res.json({
     quiz: {
@@ -169,6 +210,8 @@ router.get("/:id", async (req, res) => {
       timePerQuestion: quiz.timePerQuestion,
       isPublic: quiz.isPublic,
       channelUrl: quiz.channelUrl,
+      waitForAdminStart: quiz.waitForAdminStart,
+      canStart,
       questions,
     },
     isFirstAttempt: !firstAttempt,
@@ -191,7 +234,7 @@ router.post("/:id/start", async (req, res) => {
 
   const quiz = await prisma.quiz.findUnique({
     where: { id },
-    select: { expiresAt: true },
+    select: { expiresAt: true, waitForAdminStart: true, startedByAdminAt: true },
   });
   if (!quiz) {
     res.status(404).json({ error: "Quiz not found" });
@@ -199,6 +242,16 @@ router.post("/:id/start", async (req, res) => {
   }
   if (quiz.expiresAt < new Date()) {
     res.status(410).json({ expired: true, message: "Квиз завершен" });
+    return;
+  }
+
+  const canStart =
+    !quiz.waitForAdminStart || quiz.startedByAdminAt != null;
+  if (!canStart) {
+    res.status(403).json({
+      error: "wait_for_admin",
+      message: "Ожидание старта ведущего",
+    });
     return;
   }
 
@@ -211,6 +264,9 @@ router.post("/:id/start", async (req, res) => {
     orderBy: { startedAt: "desc" },
   });
   if (existingAttempt) {
+    if (existingAttempt.isFirstAttempt) {
+      markLeaderboardDirty(id, visitor.id);
+    }
     res.json({
       attemptId: existingAttempt.id,
       isFirstAttempt: existingAttempt.isFirstAttempt,
@@ -233,6 +289,10 @@ router.post("/:id/start", async (req, res) => {
     },
     select: { id: true, isFirstAttempt: true },
   });
+
+  if (attempt.isFirstAttempt) {
+    markLeaderboardDirty(id, visitor.id);
+  }
 
   res.json({ attemptId: attempt.id, isFirstAttempt: attempt.isFirstAttempt });
 });
@@ -333,7 +393,7 @@ router.post("/:id/answer", answerLimiter, async (req, res) => {
       questionId: question.id,
     },
   });
-  if (existing || hasBufferedAnswer(attempt.id, question.id)) {
+  if (existing || (await hasBufferedAnswer(attempt.id, question.id))) {
     res.status(409).json({ error: "Already answered" });
     return;
   }
@@ -342,7 +402,9 @@ router.post("/:id/answer", answerLimiter, async (req, res) => {
   const safeTimeLeft = Math.max(0, parsedTimeLeft || 0);
   const score = isCorrect ? 100 + safeTimeLeft * 10 : 0;
 
-  const enqueued = await enqueueAnswer({
+  let enqueued: boolean;
+  try {
+    enqueued = await enqueueAnswer({
     attemptId: attempt.id,
     visitorId: visitor.id,
     questionId: question.id,
@@ -352,6 +414,11 @@ router.post("/:id/answer", answerLimiter, async (req, res) => {
     timeLeft: safeTimeLeft,
     score,
   });
+  } catch (err) {
+    console.error("[quiz] failed to enqueue answer", err);
+    res.status(503).json({ error: "Сервер перегружен, попробуйте ещё раз" });
+    return;
+  }
   if (!enqueued) {
     res.status(409).json({ error: "Already answered" });
     return;
@@ -375,6 +442,7 @@ router.post("/:id/answer", answerLimiter, async (req, res) => {
       playerName,
       avatarUrl,
     });
+    markLeaderboardDirty(id, visitor.id);
   }
 
   res.json({
@@ -506,6 +574,73 @@ router.get("/:id/leaderboard", async (req, res) => {
   res.json(leaderboard);
 });
 
+router.post("/:id/admin-start", async (req, res) => {
+  const id = getRouteId(req.params.id);
+  const { adminToken } = (req.body as { adminToken?: string }) ?? {};
+
+  if (!id) {
+    res.status(400).json({ error: "Quiz id is required" });
+    return;
+  }
+
+  if (!adminToken || typeof adminToken !== "string") {
+    res.status(400).json({ error: "adminToken is required" });
+    return;
+  }
+
+  const quiz = await prisma.quiz.findUnique({
+    where: { id },
+    select: {
+      adminToken: true,
+      expiresAt: true,
+      waitForAdminStart: true,
+      startedByAdminAt: true,
+    },
+  });
+
+  if (!quiz) {
+    res.status(404).json({ error: "Quiz not found" });
+    return;
+  }
+
+  if (quiz.adminToken !== adminToken.trim()) {
+    res.status(403).json({ error: "Invalid admin token" });
+    return;
+  }
+
+  if (quiz.expiresAt < new Date()) {
+    res.status(410).json({ expired: true, message: "Квиз завершен" });
+    return;
+  }
+
+  if (!quiz.waitForAdminStart) {
+    res.status(400).json({
+      error: "Quiz does not use wait-for-admin mode",
+      message: "Этот квиз не требует ручного старта ведущего",
+    });
+    return;
+  }
+
+  if (quiz.startedByAdminAt != null) {
+    res.status(400).json({
+      error: "Already started",
+      message: "Квиз уже запущен",
+    });
+    return;
+  }
+
+  await prisma.quiz.update({
+    where: { id },
+    data: { startedByAdminAt: new Date() },
+  });
+
+  const io = getIO();
+  io.to(quizRoom(id)).emit("quiz:started");
+  io.to(adminRoom(id)).emit("quiz:started");
+
+  res.json({ success: true });
+});
+
 router.post("/:id/check-subscription", async (req, res) => {
   const id = getRouteId(req.params.id);
   const visitor = req.visitor;
@@ -602,6 +737,8 @@ router.post("/:id/reset", adminOnly, async (req, res) => {
 
   await flushQuizNow(id);
 
+  const newExpiresAt = new Date(Date.now() + 3 * 60 * 60 * 1000);
+
   await prisma.$transaction(async (tx) => {
     await tx.answer.deleteMany({
       where: { quizId: id },
@@ -609,14 +746,20 @@ router.post("/:id/reset", adminOnly, async (req, res) => {
     await tx.quizAttempt.deleteMany({
       where: { quizId: id },
     });
+    await tx.quiz.update({
+      where: { id },
+      data: { expiresAt: newExpiresAt, startedByAdminAt: null },
+    });
   });
 
+  scheduleQuizExpiry(id, newExpiresAt);
   clearLeaderboardCache(id);
   clearQuizCache(id);
   clearQuizQuestions(id);
 
   const io = getIO();
   io.to(quizRoom(id)).emit("quiz:reset");
+  io.to(adminRoom(id)).emit("quiz:reset");
 
   res.json({ success: true });
 });
@@ -648,6 +791,44 @@ router.put("/:id", adminOnly, async (req, res) => {
     }
     res.status(500).json({ error: "Failed to update quiz" });
   }
+});
+
+router.patch("/:id/toggle-active", adminOnly, async (req, res) => {
+  const id = getRouteId(req.params.id);
+  const visitor = req.visitor;
+
+  if (!id) {
+    res.status(400).json({ error: "Quiz id is required" });
+    return;
+  }
+
+  if (!visitor) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  const quiz = await prisma.quiz.findUnique({
+    where: { id },
+    select: { creatorId: true, isActive: true },
+  });
+
+  if (!quiz) {
+    res.status(404).json({ error: "Quiz not found" });
+    return;
+  }
+
+  if (quiz.creatorId !== visitor.id) {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+
+  const updated = await prisma.quiz.update({
+    where: { id },
+    data: { isActive: !quiz.isActive },
+    select: { isActive: true },
+  });
+
+  res.json({ isActive: updated.isActive });
 });
 
 router.delete("/:id", adminOnly, async (req, res) => {

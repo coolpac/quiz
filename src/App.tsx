@@ -25,7 +25,7 @@ function App({
   );
   const [editQuizId, setEditQuizId] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [quizId] = useState<string | null>(initialQuizId ?? null);
+  const [quizId, setQuizId] = useState<string | null>(initialQuizId ?? null);
   const [results, setResults] = useState<QuizResults>({
     score: 0,
     correctCount: 0,
@@ -150,6 +150,10 @@ function App({
               }}
               onAdmin={() => setView("admin")}
               onCreate={() => setView("create")}
+              onPlayQuiz={(id) => {
+                setQuizId(id);
+                setView("quiz");
+              }}
               isAdmin={isAdmin}
               hasQuizId={Boolean(quizId)}
             />

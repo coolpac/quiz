@@ -16,32 +16,63 @@ router.get("/dashboard", adminOnly, async (req, res) => {
   }
 
   const now = new Date();
+  const creatorFilter = { creatorId: visitor.id };
 
-  const [totalGames, activeQuizzes, playerGroups, topQuizzes, backlog] =
-    await Promise.all([
+  const [
+    completedGames,
+    totalAttempts,
+    totalQuizzes,
+    activeQuizzes,
+    totalPlayersResult,
+    topQuizzes,
+    backlog,
+  ] = await Promise.all([
     prisma.quizAttempt.count({
-      where: { quiz: { creatorId: visitor.id } },
+      where: {
+        quiz: creatorFilter,
+        isFirstAttempt: true,
+        completedAt: { not: null },
+      },
+    }),
+    prisma.quizAttempt.count({
+      where: { quiz: creatorFilter, isFirstAttempt: true },
     }),
     prisma.quiz.count({
-      where: { creatorId: visitor.id, expiresAt: { gt: now } },
+      where: creatorFilter,
     }),
-    prisma.quizAttempt.groupBy({
-      by: ["visitorId"],
-      where: { quiz: { creatorId: visitor.id } },
+    prisma.quiz.count({
+      where: { ...creatorFilter, isActive: true, expiresAt: { gt: now } },
     }),
+    prisma.$queryRaw<[{ count: bigint }]>`
+      SELECT COUNT(DISTINCT qa."visitorId") as count
+      FROM "QuizAttempt" qa
+      INNER JOIN "Quiz" q ON q.id = qa."quizId"
+      WHERE q."creatorId" = ${visitor.id}
+    `,
     prisma.quiz.findMany({
-      where: { creatorId: visitor.id },
-      include: { _count: { select: { attempts: true, questions: true } } },
+      where: creatorFilter,
+      include: {
+        _count: {
+          select: {
+            attempts: { where: { isFirstAttempt: true } },
+            questions: true,
+          },
+        },
+      },
       orderBy: { attempts: { _count: "desc" } },
       take: 5,
     }),
     getBacklogMetrics(),
   ]);
 
+  const totalPlayers = Number(totalPlayersResult[0]?.count ?? 0);
+
   res.json({
-    totalGames,
+    totalGames: completedGames,
+    totalAttempts,
+    totalQuizzes,
     activeQuizzes,
-    totalPlayers: playerGroups.length,
+    totalPlayers,
     backlog,
     topQuizzes: topQuizzes.map((quiz) => ({
       title: quiz.title,

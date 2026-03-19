@@ -1,14 +1,23 @@
 const baseUrl = import.meta.env.VITE_API_URL ?? "";
 
 let telegramInitData = "";
+let platform: "telegram" | "max" = "telegram";
 
 export const setTelegramInitData = (value?: string) => {
   telegramInitData = value ?? "";
 };
 
+export const setPlatform = (p: "telegram" | "max") => {
+  platform = p;
+};
+
 const buildHeaders = (withBody: boolean) => {
   const headers: Record<string, string> = {};
-  headers["X-Telegram-Init-Data"] = telegramInitData;
+  if (platform === "max") {
+    headers["X-Max-Init-Data"] = telegramInitData;
+  } else {
+    headers["X-Telegram-Init-Data"] = telegramInitData;
+  }
   if (withBody) {
     headers["Content-Type"] = "application/json";
   }
@@ -51,17 +60,29 @@ export const api = {
     timeLeft: number,
     attemptId: string,
   ) {
-    const response = await fetch(`${baseUrl}/api/quiz/${quizId}/answer`, {
-      method: "POST",
-      headers: buildHeaders(true),
-      body: JSON.stringify({ questionIndex, answerIndex, timeLeft, attemptId }),
-    });
+    let lastError: Error | null = null;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      const response = await fetch(`${baseUrl}/api/quiz/${quizId}/answer`, {
+        method: "POST",
+        headers: buildHeaders(true),
+        body: JSON.stringify({ questionIndex, answerIndex, timeLeft, attemptId }),
+      });
 
-    if (!response.ok) {
-      throw new Error(await parseError(response));
+      if (response.ok) {
+        return response.json();
+      }
+
+      const msg = await parseError(response);
+      lastError = new Error(msg);
+
+      if (response.status === 503 && attempt < 3) {
+        await new Promise((r) => setTimeout(r, 800 * attempt));
+        continue;
+      }
+
+      throw lastError;
     }
-
-    return response.json();
+    throw lastError ?? new Error("Unknown error");
   },
 
   async completeQuiz(quizId: string, attemptId: string) {
@@ -148,6 +169,7 @@ export const api = {
     timePerQuestion: number;
     isPublic: boolean;
     channelUrl?: string | null;
+    waitForAdminStart?: boolean;
     questions: Array<{
       text: string;
       options: string[];
@@ -169,6 +191,35 @@ export const api = {
     }
 
     return response.json();
+  },
+
+  async getActiveQuizzes() {
+    const response = await fetch(`${baseUrl}/api/quiz/active`);
+    if (!response.ok) {
+      throw new Error(await parseError(response));
+    }
+    return response.json() as Promise<{
+      quizzes: Array<{
+        id: string;
+        title: string;
+        category: string;
+        difficulty: string;
+        questionsCount: number;
+        playersCount: number;
+        timePerQuestion: number;
+      }>;
+    }>;
+  },
+
+  async toggleQuizActive(quizId: string) {
+    const response = await fetch(`${baseUrl}/api/quiz/${quizId}/toggle-active`, {
+      method: "PATCH",
+      headers: buildHeaders(true),
+    });
+    if (!response.ok) {
+      throw new Error(await parseError(response));
+    }
+    return response.json() as Promise<{ isActive: boolean }>;
   },
 
   async getMyQuizzes() {
@@ -219,6 +270,21 @@ export const api = {
     return response.json();
   },
 
+  async adminStartQuiz(quizId: string, adminToken: string) {
+    const response = await fetch(`${baseUrl}/api/quiz/${quizId}/admin-start`, {
+      method: "POST",
+      headers: buildHeaders(true),
+      body: JSON.stringify({ adminToken }),
+    });
+
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data?.message ?? data?.error ?? await parseError(response));
+    }
+
+    return response.json();
+  },
+
   async resetQuiz(quizId: string) {
     const response = await fetch(`${baseUrl}/api/quiz/${quizId}/reset`, {
       method: "POST",
@@ -255,6 +321,7 @@ export const api = {
       timePerQuestion: number;
       isPublic: boolean;
       channelUrl?: string | null;
+      waitForAdminStart?: boolean;
       questions: Array<{
         text: string;
         options: string[];

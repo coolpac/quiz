@@ -2,26 +2,35 @@ import crypto from "crypto";
 import { prisma } from "../lib/prisma";
 import type { Request, Response, NextFunction } from "express";
 
-const getInitData = (req: Request) => {
+type InitDataSource = { data: string; platform: "telegram" | "max" };
+
+const getInitData = (req: Request): InitDataSource | null => {
+  // Check Max-specific header first
+  const maxInitData = req.headers["x-max-init-data"] as string | undefined;
+  if (maxInitData) {
+    return { data: maxInitData, platform: "max" };
+  }
+
+  // Then check Telegram headers (existing logic)
   const headerInitData =
     (req.headers["x-telegram-init-data"] as string | undefined) ??
     (req.headers["x-telegram-initdata"] as string | undefined);
 
   if (headerInitData) {
-    return headerInitData;
+    return { data: headerInitData, platform: "telegram" };
   }
 
   const authHeader = req.headers.authorization;
   if (authHeader && authHeader.toLowerCase().startsWith("twa ")) {
-    return authHeader.slice(4).trim();
+    return { data: authHeader.slice(4).trim(), platform: "telegram" };
   }
 
   if (typeof req.body?.initData === "string") {
-    return req.body.initData;
+    return { data: req.body.initData, platform: "telegram" };
   }
 
   if (typeof req.query?.initData === "string") {
-    return req.query.initData;
+    return { data: req.query.initData, platform: "telegram" };
   }
 
   return null;
@@ -80,19 +89,24 @@ export const validateTelegramInitData = async (
     .split(",")
     .map((id) => id.trim())
     .filter(Boolean);
-  const botToken = process.env.BOT_TOKEN;
-  if (!botToken) {
-    res.status(500).json({ error: "BOT_TOKEN is not configured" });
-    return;
-  }
-
-  const initData = getInitData(req);
-  if (!initData) {
+  const source = getInitData(req);
+  if (!source) {
     res.status(401).json({ error: "Missing initData" });
     return;
   }
 
-  const user = validateInitData(initData, botToken);
+  const botToken =
+    source.platform === "max"
+      ? process.env.MAX_BOT_TOKEN
+      : process.env.BOT_TOKEN;
+  if (!botToken) {
+    res
+      .status(500)
+      .json({ error: `${source.platform === "max" ? "MAX_BOT_TOKEN" : "BOT_TOKEN"} is not configured` });
+    return;
+  }
+
+  const user = validateInitData(source.data, botToken);
   if (!user) {
     res.status(401).json({ error: "Invalid initData" });
     return;
