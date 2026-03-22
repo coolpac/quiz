@@ -255,7 +255,7 @@ async function sendActiveQuizzes(client: MaxBotClient, chatId: number): Promise<
     return;
   }
 
-  const maxBotUsername = process.env.MAX_BOT_USERNAME ?? "";
+  const maxBotUsername = getMaxBotUsername();
 
   const buttons = quizzes.map((quiz) => [
     maxBotUsername
@@ -339,6 +339,13 @@ async function sendQuizInfo(client: MaxBotClient, chatId: number, quizId: string
   );
 }
 
+/** Resolved Max bot username, populated at startup via GET /me */
+let _maxBotUsername: string | null = null;
+
+export function getMaxBotUsername(): string {
+  return _maxBotUsername ?? process.env.MAX_BOT_USERNAME ?? "";
+}
+
 /**
  * Setup Max bot on server startup: update bot info and register webhook.
  */
@@ -349,9 +356,21 @@ export async function setupMaxBot(): Promise<void> {
 
   const client = getMaxBotClient();
 
+  // Auto-detect bot username via GET /me
+  try {
+    const me = await client.getMe();
+    if (me.username) {
+      _maxBotUsername = me.username;
+      console.log("[Max bot] Username resolved:", _maxBotUsername);
+    }
+  } catch (err) {
+    console.error("[Max bot] Failed to get bot info:", err instanceof Error ? err.message : String(err));
+  }
+
   // Set bot commands and description
   try {
     await client.editBotInfo({
+      name: "Киберслон",
       description: "Квиз-платформа Киберслон — создавай викторины и соревнуйся!",
       commands: [
         { name: "start", description: "Главное меню" },
