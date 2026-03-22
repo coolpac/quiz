@@ -123,6 +123,7 @@ export const validateTelegramInitData = async (
   });
 
   req.visitor = visitor;
+  req.platform = source.platform;
   req.isAdmin = adminIds.includes(telegramId.toString());
   next();
 };

@@ -1,63 +1,88 @@
-import React from "react";
-import { Loader2 } from "lucide-react";
+import { motion } from "framer-motion";
 
 interface LoadingScreenProps {
   progress?: number;
   message?: string;
 }
 
-const LoadingScreen: React.FC<LoadingScreenProps> = ({ 
-  progress, 
-  message = "Подготовка квиза..." 
-}) => {
+export default function LoadingScreen({
+  progress = 0,
+  message = "Загрузка...",
+}: LoadingScreenProps) {
   return (
-    <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-background overflow-hidden">
-      {/* Background decorative elements */}
-      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-primary/10 rounded-full blur-[120px] animate-pulse" />
-      <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-primary/10 rounded-full blur-[120px] animate-pulse delay-700" />
-      
-      <div className="relative flex flex-col items-center max-w-xs w-full px-6">
-        {/* Logo or Icon Container */}
-        <div className="relative mb-8">
-          <div className="absolute inset-0 bg-primary/20 rounded-full blur-2xl animate-pulse" />
-          <div className="relative bg-card border border-primary/20 p-5 rounded-3xl shadow-2xl">
-            <Loader2 className="w-10 h-10 text-primary animate-spin" strokeWidth={2.5} />
-          </div>
+    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-background">
+      {/* Контейнер для слона */}
+      <motion.div
+        className="relative w-64 h-64 flex items-center justify-center"
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.5, ease: "easeOut" }}
+      >
+        {/* 
+          Используем картинку как маску. 
+          Это позволит закрасить слона в фирменный цвет приложения (primary)
+          и сделать красивую анимацию "заполнения" или "блика",
+          так как статичная картинка не может физически перебирать ногами.
+        */}
+        <div 
+          className="w-full h-full bg-muted/30 relative overflow-hidden"
+          style={{
+            WebkitMaskImage: 'url(/elephant_transparent.png)',
+            WebkitMaskSize: 'contain',
+            WebkitMaskRepeat: 'no-repeat',
+            WebkitMaskPosition: 'center',
+            maskImage: 'url(/elephant_transparent.png)',
+            maskSize: 'contain',
+            maskRepeat: 'no-repeat',
+            maskPosition: 'center',
+          }}
+        >
+          {/* Базовый цвет слона (полупрозрачный основной цвет) */}
+          <div className="absolute inset-0 bg-primary/20" />
+
+          {/* Анимация волны/блика, проходящей по слону */}
+          <motion.div
+            className="absolute top-0 bottom-0 w-[200%] bg-gradient-to-r from-transparent via-primary to-transparent opacity-80"
+            animate={{
+              x: ['-100%', '100%'],
+            }}
+            transition={{
+              duration: 2,
+              repeat: Infinity,
+              ease: "easeInOut",
+            }}
+          />
+          
+          {/* Заполнение слона снизу вверх в зависимости от прогресса */}
+          <motion.div 
+            className="absolute bottom-0 left-0 right-0 bg-primary"
+            initial={{ height: '0%' }}
+            animate={{ height: `${progress}%` }}
+            transition={{ duration: 0.3, ease: "easeOut" }}
+          />
+        </div>
+      </motion.div>
+
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.3, duration: 0.5 }}
+        className="mt-8 flex w-64 flex-col items-center gap-4 relative z-20"
+      >
+        <div className="text-sm font-medium uppercase tracking-[0.2em] text-primary">
+          {message}
         </div>
 
-        {/* Text Content */}
-        <div className="text-center mb-8 space-y-2">
-          <h2 className="text-2xl font-bold tracking-tight text-foreground animate-in fade-in slide-in-from-bottom-4 duration-700">
-            Кибер Слон
-          </h2>
-          <p className="text-muted-foreground text-sm font-medium animate-in fade-in slide-in-from-bottom-2 duration-1000 delay-200">
-            {message}
-          </p>
+        <div className="h-1.5 w-full overflow-hidden rounded-full bg-secondary border border-border">
+          <motion.div
+            className="h-full bg-primary"
+            initial={{ width: 0 }}
+            animate={{ width: `${progress}%` }}
+            transition={{ duration: 0.3, ease: "easeOut" }}
+          />
         </div>
-
-        {/* Progress Bar Container */}
-        {typeof progress === "number" && (
-          <div className="w-full space-y-3">
-            <div className="h-1.5 w-full bg-secondary rounded-full overflow-hidden">
-              <div 
-                className="h-full bg-primary transition-all duration-500 ease-out shadow-[0_0_12px_rgba(var(--primary),0.5)]"
-                style={{ width: `${Math.min(100, Math.max(0, progress))}%` }}
-              />
-            </div>
-            <div className="flex justify-between items-center text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">
-              <span>Загрузка</span>
-              <span>{Math.round(progress)}%</span>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Footer hint */}
-      <div className="absolute bottom-12 text-[10px] font-medium text-muted-foreground/40 uppercase tracking-[0.2em]">
-        Кибер Слон
-      </div>
+        <div className="font-mono text-xs text-muted-foreground">{Math.round(progress)}%</div>
+      </motion.div>
     </div>
   );
-};
-
-export default LoadingScreen;
+}

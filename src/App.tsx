@@ -13,6 +13,9 @@ const ResultView = lazy(() => import("./views/ResultView"));
 
 const LoadingSpinner = () => <LoadingScreen progress={100} message="Загрузка модуля..." />;
 
+/** Минимум, сколько держим экран загрузки (мс). Увеличьте, если нужно дольше смотреть анимацию. */
+const MIN_LOADING_MS = 5000;
+
 function App({
   initialQuizId,
   startedFromParam,
@@ -37,23 +40,26 @@ function App({
   const [loadingProgress, setLoadingProgress] = useState(0);
 
   useEffect(() => {
-    // Имитация плавной загрузки для лучшего UX
+    const startedAt = Date.now();
+
+    // Плавный «фейковый» прогресс до ~95%, привязанный ко времени
     const interval = setInterval(() => {
       setLoadingProgress((prev) => {
-        if (prev >= 95) {
-          clearInterval(interval);
-          return 95;
+        const elapsed = Date.now() - startedAt;
+        const timeBased = Math.min(92, (elapsed / MIN_LOADING_MS) * 88);
+        const next = Math.max(prev, timeBased + Math.random() * 2);
+        if (next >= 94) {
+          return 94;
         }
-        return prev + Math.random() * 15;
+        return next;
       });
-    }, 200);
+    }, 120);
 
     Promise.all([
       api.getMe().then((data) => {
         setIsAdmin(Boolean(data?.isAdmin));
       }),
-      // Минимальное время отображения для предотвращения мерцания
-      new Promise((resolve) => setTimeout(resolve, 1500)),
+      new Promise((resolve) => setTimeout(resolve, MIN_LOADING_MS)),
     ])
       .then(() => {
         setLoadingProgress(100);
@@ -82,6 +88,7 @@ function App({
         };
       }
     ).Telegram?.WebApp;
+    const maxApp = window.WebApp;
     const media = window.matchMedia?.("(prefers-color-scheme: dark)");
 
     const applyTheme = (isDark: boolean) => {
@@ -93,6 +100,7 @@ function App({
         applyTheme(telegram.colorScheme === "dark");
         return;
       }
+      // Max doesn't expose colorScheme — fall through to media query
       applyTheme(media?.matches ?? false);
     };
 
@@ -112,6 +120,7 @@ function App({
       media?.addListener?.(handleMediaChange);
     }
     telegram?.onEvent?.("themeChanged", handleTelegramTheme);
+    maxApp?.onEvent?.("themeChanged", handleTelegramTheme);
 
     return () => {
       if (media?.removeEventListener) {
@@ -120,6 +129,7 @@ function App({
         media?.removeListener?.(handleMediaChange);
       }
       telegram?.offEvent?.("themeChanged", handleTelegramTheme);
+      maxApp?.offEvent?.("themeChanged", handleTelegramTheme);
     };
   }, []);
 

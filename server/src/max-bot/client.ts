@@ -114,6 +114,15 @@ export class MaxBotClient {
     return this.request("GET", "/me");
   }
 
+  /** PATCH /me — update bot info (name, description, commands) */
+  async editBotInfo(info: {
+    name?: string;
+    description?: string;
+    commands?: Array<{ name: string; description: string }>;
+  }): Promise<MaxBotInfo> {
+    return this.request("PATCH", "/me", info);
+  }
+
   /** POST /messages — send a text message */
   async sendMessage(
     chatId: number,

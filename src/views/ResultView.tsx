@@ -16,7 +16,7 @@ import SocketStatusBadge from "../components/SocketStatusBadge";
 import { Button } from "../components/ui/Button";
 import { cn } from "../lib/cn";
 import { useToast, type ToastVariant } from "../components/Toast";
-import { hapticSelection } from "../lib/telegramUi";
+import { hapticSelection, sharePlatformURL } from "../lib/telegramUi";
 import type { LeaderboardPlayer, QuizResults } from "../types/quiz";
 
 type LeaderboardItemProps = {
@@ -359,8 +359,11 @@ const ResultView = ({ results, onRestart }: ResultViewProps) => {
                       const shareLink = quizId
                         ? `${window.location.origin}?quizId=${quizId}`
                         : window.location.href;
-                      if (shareURL.isAvailable()) {
-                        shareURL(shareLink, "Присоединяйся к квизу!");
+                      // Try Max first, then Telegram
+                      if (!sharePlatformURL(shareLink, "Присоединяйся к квизу!")) {
+                        if (shareURL.isAvailable()) {
+                          shareURL(shareLink, "Присоединяйся к квизу!");
+                        }
                       }
                     }}
                   >

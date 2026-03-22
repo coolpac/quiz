@@ -61,6 +61,7 @@ type MyQuizItem = {
   isActive: boolean;
   isExpired: boolean;
   deepLink?: string | null;
+  maxDeepLink?: string | null;
   adminToken?: string | null;
 };
 
@@ -1129,6 +1130,26 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
                               <ExternalLink size={20} /> Открыть в TG
                             </Button>
                           </div>
+
+                          {qrQuiz?.maxDeepLink && (
+                            <div className="mt-4 pt-4 border-t border-white/10">
+                              <div className="text-[10px] font-bold uppercase tracking-widest text-white/40 mb-2">Max</div>
+                              <div className="bg-white rounded-2xl p-4 inline-block">
+                                <QRCodeSVG value={qrQuiz.maxDeepLink} size={160} />
+                              </div>
+                              <div className="mt-2">
+                                <button
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(qrQuiz.maxDeepLink!);
+                                    pushToast("Ссылка Max скопирована", "success");
+                                  }}
+                                  className="flex items-center gap-2 mx-auto text-xs text-white/50 hover:text-white transition-colors"
+                                >
+                                  <Copy size={12} /> Копировать ссылку Max
+                                </button>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </motion.div>
                     </motion.div>

@@ -18,7 +18,7 @@ import { Button } from "../components/ui/Button";
 import SocketStatusBadge from "../components/SocketStatusBadge";
 import { cn } from "../lib/cn";
 import { useToast, type ToastVariant } from "../components/Toast";
-import { hapticImpact, hapticNotify, hapticSelection } from "../lib/telegramUi";
+import { hapticImpact, hapticNotify, hapticSelection, closePlatformApp } from "../lib/telegramUi";
 import type { LiveFeedItem, QuizData, QuizResults } from "../types/quiz";
 
 const teamColors = [
@@ -830,6 +830,8 @@ const QuizView = ({ quizId, onFinish, openedFromStartParam }: QuizViewProps) => 
               onClick={() => {
                 if (closeMiniApp.isAvailable()) {
                   closeMiniApp();
+                } else {
+                  closePlatformApp();
                 }
               }}
               className="w-full py-6 text-lg"

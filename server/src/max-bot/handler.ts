@@ -7,6 +7,14 @@ import { prisma } from "../lib/prisma";
 
 const APP_URL = process.env.MAX_APP_URL || process.env.APP_URL || "https://cyberquiz.ru";
 
+const isMaxAdmin = (userId: number): boolean => {
+  const adminIds = (process.env.ADMIN_IDS ?? "")
+    .split(",")
+    .map((id) => id.trim())
+    .filter(Boolean);
+  return adminIds.includes(String(userId));
+};
+
 let _client: MaxBotClient | null = null;
 
 export function getMaxBotClient(): MaxBotClient {
@@ -57,6 +65,7 @@ async function handleMessage(client: MaxBotClient, update: MaxUpdate): Promise<v
   const userName = msg.sender.name || "друг";
 
   if (text === "/start") {
+    const isAdmin = isMaxAdmin(msg.sender.user_id);
     await client.sendMessage(
       chatId,
       `👋 **Привет, ${userName}!**\n\n` +
@@ -88,6 +97,11 @@ async function handleMessage(client: MaxBotClient, update: MaxUpdate): Promise<v
               payload: "leaderboard",
             },
           ],
+          ...(isAdmin ? [[{
+            type: "open_app" as const,
+            text: "➕ Создать квиз",
+            url: APP_URL,
+          }]] : []),
         ],
       }
     );
@@ -175,6 +189,8 @@ async function handleBotStarted(client: MaxBotClient, update: MaxUpdate): Promis
 
   if (!chatId) return;
 
+  const isAdmin = update.user ? isMaxAdmin(update.user.user_id) : false;
+
   // Deep link support: payload contains quizId
   if (update.payload) {
     const quizId = update.payload;
@@ -197,6 +213,11 @@ async function handleBotStarted(client: MaxBotClient, update: MaxUpdate): Promis
             payload: "active_quizzes",
           },
         ],
+        ...(isAdmin ? [[{
+          type: "open_app" as const,
+          text: "➕ Создать квиз",
+          url: APP_URL,
+        }]] : []),
       ],
     }
   );
@@ -305,6 +326,46 @@ async function sendQuizInfo(client: MaxBotClient, chatId: number, quizId: string
       ],
     }
   );
+}
+
+/**
+ * Setup Max bot on server startup: update bot info and register webhook.
+ */
+export async function setupMaxBot(): Promise<void> {
+  const token = process.env.MAX_BOT_TOKEN;
+  const appUrl = process.env.APP_URL || process.env.MAX_APP_URL;
+  if (!token || !appUrl) return;
+
+  const client = getMaxBotClient();
+
+  // Set bot commands and description
+  try {
+    await client.editBotInfo({
+      description: "Квиз-платформа Киберслон — создавай викторины и соревнуйся!",
+      commands: [
+        { name: "start", description: "Главное меню" },
+        { name: "help", description: "Помощь" },
+        { name: "play", description: "Активные квизы" },
+      ],
+    });
+    console.log("[Max bot] Bot info updated");
+  } catch (err) {
+    console.error("[Max bot] Failed to update bot info:", err instanceof Error ? err.message : String(err));
+  }
+
+  // Auto-register webhook
+  const webhookUrl = `${appUrl}/webhook/max`;
+  try {
+    const current = await client.getSubscription() as { url?: string };
+    if (current?.url !== webhookUrl) {
+      await client.subscribe(webhookUrl);
+      console.log("[Max bot] Webhook registered:", webhookUrl);
+    } else {
+      console.log("[Max bot] Webhook already set:", webhookUrl);
+    }
+  } catch (err) {
+    console.error("[Max bot] Failed to setup webhook:", err instanceof Error ? err.message : String(err));
+  }
 }
 
 async function sendHelpMessage(client: MaxBotClient, chatId: number): Promise<void> {

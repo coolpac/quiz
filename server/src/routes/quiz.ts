@@ -94,7 +94,9 @@ router.post("/", adminOnly, async (req, res) => {
     // Используем формат /start {quizId} для автоматической отправки команды боту
     // Это гарантирует, что бот получит команду /start и отправит кнопку
     const deepLink = `https://t.me/${botUsername}?start=${quiz.id}`;
-    res.json({ id: quiz.id, deepLink, adminToken: quiz.adminToken });
+    const maxBotUsername = process.env.MAX_BOT_USERNAME ?? "";
+    const maxDeepLink = maxBotUsername ? `https://max.ru/${maxBotUsername}?start=${quiz.id}` : null;
+    res.json({ id: quiz.id, deepLink, maxDeepLink, adminToken: quiz.adminToken });
   } catch (error) {
     if (error instanceof ValidationError) {
       res.status(400).json({ error: error.message });
@@ -111,6 +113,7 @@ router.get("/my", adminOnly, async (req, res) => {
     return;
   }
   const botUsername = process.env.BOT_USERNAME ?? "";
+  const maxBotUsername = process.env.MAX_BOT_USERNAME ?? "";
   const now = new Date();
 
   const quizzes = await prisma.quiz.findMany({
@@ -140,6 +143,9 @@ router.get("/my", adminOnly, async (req, res) => {
       adminToken: quiz.adminToken,
       deepLink: botUsername
         ? `https://t.me/${botUsername}?start=${quiz.id}`
+        : null,
+      maxDeepLink: maxBotUsername
+        ? `https://max.ru/${maxBotUsername}?start=${quiz.id}`
         : null,
     })),
   });

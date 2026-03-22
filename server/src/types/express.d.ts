@@ -5,6 +5,7 @@ declare global {
     interface Request {
       visitor?: Visitor;
       isAdmin?: boolean;
+      platform?: "telegram" | "max";
     }
   }
 }

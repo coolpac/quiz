@@ -13,6 +13,7 @@ import uploadRoutes from "./routes/upload";
 import { initSocket } from "./socket";
 import { telegramWebhook } from "./bot";
 import { maxWebhookRouter } from "./max-bot/route";
+import { setupMaxBot } from "./max-bot/handler";
 import { apiLimiter } from "./middleware/rateLimit";
 import { flushNow } from "./services/answerBuffer";
 import { prisma } from "./lib/prisma";
@@ -63,6 +64,10 @@ const port = Number(process.env.PORT) || 3001;
 void initSocket(server).then(() => {
   server.listen(port, () => {
     console.log(`Server is running on port ${port}`);
+
+    setupMaxBot().catch((err) => {
+      console.error("[startup] Max bot setup failed:", err);
+    });
   });
 });
 
