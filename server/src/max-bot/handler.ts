@@ -92,6 +92,13 @@ async function handleMessage(client: MaxBotClient, update: MaxUpdate): Promise<v
         buttons: [
           [
             {
+              type: "open_app" as const,
+              text: "🚀 Открыть приложение",
+              url: APP_URL,
+            },
+          ],
+          [
+            {
               type: "callback",
               text: "🎮 Активные квизы",
               payload: "active_quizzes",
@@ -111,7 +118,7 @@ async function handleMessage(client: MaxBotClient, update: MaxUpdate): Promise<v
           ],
           ...(isAdmin ? [[{
             type: "open_app" as const,
-            text: "➕ Создать квиз",
+            text: "⚙️ Админ-панель",
             url: APP_URL,
           }]] : []),
         ],
@@ -127,6 +134,16 @@ async function handleMessage(client: MaxBotClient, update: MaxUpdate): Promise<v
 
   if (text === "/play") {
     await sendActiveQuizzes(client, chatId);
+    return;
+  }
+
+  if (text === "/chatid") {
+    await client.sendMessage(
+      chatId,
+      `📋 **ID этого чата:** \`${chatId}\`\n\n` +
+        "Используйте этот ID при создании квиза для проверки подписки на Max канал.",
+      { format: "markdown" }
+    );
     return;
   }
 
@@ -220,6 +237,13 @@ async function handleBotStarted(client: MaxBotClient, update: MaxUpdate): Promis
       buttons: [
         [
           {
+            type: "open_app" as const,
+            text: "🚀 Открыть приложение",
+            url: APP_URL,
+          },
+        ],
+        [
+          {
             type: "callback",
             text: "🎮 Активные квизы",
             payload: "active_quizzes",
@@ -227,7 +251,7 @@ async function handleBotStarted(client: MaxBotClient, update: MaxUpdate): Promis
         ],
         ...(isAdmin ? [[{
           type: "open_app" as const,
-          text: "➕ Создать квиз",
+          text: "⚙️ Админ-панель",
           url: APP_URL,
         }]] : []),
       ],
