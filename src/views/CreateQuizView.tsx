@@ -269,6 +269,7 @@ const CreateQuizView = ({ onExit, quizId: editQuizId }: CreateQuizViewProps) => 
         selfPaced,
         enableTeams,
         teamCount,
+        platform,
         channelUrl: channelUrl.trim() ? channelUrl.trim() : null,
         maxChannelId: maxChannelId.trim() ? maxChannelId.trim() : null,
         questions: questions.map((question, index) => {
@@ -679,32 +680,34 @@ const CreateQuizView = ({ onExit, quizId: editQuizId }: CreateQuizViewProps) => 
                 </div>
 
                 <div className="w-full max-w-md space-y-6">
-                  <div className="p-8 rounded-[2.5rem] bg-white dark:bg-white/5 border border-black/5 dark:border-white/10 shadow-2xl relative group overflow-hidden">
-                    <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-purple-500/5 opacity-0 group-hover:opacity-100 transition-opacity" />
-                    <div className="relative z-10 flex flex-col items-center gap-6">
-                      <div className="p-3 sm:p-4 bg-white rounded-3xl shadow-inner shadow-black/5">
-                        <QRCodeSVG
-                          value={quizUrl}
-                          size={isMobile ? 150 : 200}
-                          level="H"
-                          includeMargin={false}
-                          imageSettings={{
-                            src: "https://api.dicebear.com/7.x/avataaars/svg?seed=Felix",
-                            x: undefined,
-                            y: undefined,
-                            height: isMobile ? 30 : 40,
-                            width: isMobile ? 30 : 40,
-                            excavate: true,
-                          }}
-                        />
-                      </div>
-                      <div className="text-[10px] font-black uppercase tracking-widest opacity-40">
-                        Telegram
+                  {(platform === "both" || platform === "telegram") && (
+                    <div className="p-8 rounded-[2.5rem] bg-white dark:bg-white/5 border border-black/5 dark:border-white/10 shadow-2xl relative group overflow-hidden">
+                      <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-purple-500/5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                      <div className="relative z-10 flex flex-col items-center gap-6">
+                        <div className="p-3 sm:p-4 bg-white rounded-3xl shadow-inner shadow-black/5">
+                          <QRCodeSVG
+                            value={quizUrl}
+                            size={isMobile ? 150 : 200}
+                            level="H"
+                            includeMargin={false}
+                            imageSettings={{
+                              src: "https://api.dicebear.com/7.x/avataaars/svg?seed=Felix",
+                              x: undefined,
+                              y: undefined,
+                              height: isMobile ? 30 : 40,
+                              width: isMobile ? 30 : 40,
+                              excavate: true,
+                            }}
+                          />
+                        </div>
+                        <div className="text-[10px] font-black uppercase tracking-widest opacity-40">
+                          Telegram
+                        </div>
                       </div>
                     </div>
-                  </div>
+                  )}
 
-                  {maxQuizUrl && (
+                  {(platform === "both" || platform === "max") && maxQuizUrl && (
                     <div className="p-8 rounded-[2.5rem] bg-white dark:bg-white/5 border border-black/5 dark:border-white/10 shadow-2xl relative group overflow-hidden">
                       <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-cyan-500/5 opacity-0 group-hover:opacity-100 transition-opacity" />
                       <div className="relative z-10 flex flex-col items-center gap-6">
@@ -724,18 +727,20 @@ const CreateQuizView = ({ onExit, quizId: editQuizId }: CreateQuizViewProps) => 
                   )}
 
                   <div className="flex flex-col gap-3">
-                    <div className="flex items-center gap-2 p-3 sm:p-4 rounded-2xl bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10">
-                      <div className="flex-1 truncate font-bold text-xs sm:text-sm opacity-60 text-left">
-                        {quizUrl}
+                    {(platform === "both" || platform === "telegram") && (
+                      <div className="flex items-center gap-2 p-3 sm:p-4 rounded-2xl bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10">
+                        <div className="flex-1 truncate font-bold text-xs sm:text-sm opacity-60 text-left">
+                          {quizUrl}
+                        </div>
+                        <button
+                          onClick={copyToClipboard}
+                          className="p-2 hover:bg-primary/10 hover:text-primary rounded-xl transition-all flex-shrink-0"
+                        >
+                          <Copy className="w-4 h-4 sm:w-[18px] sm:h-[18px]" />
+                        </button>
                       </div>
-                      <button
-                        onClick={copyToClipboard}
-                        className="p-2 hover:bg-primary/10 hover:text-primary rounded-xl transition-all flex-shrink-0"
-                      >
-                        <Copy className="w-4 h-4 sm:w-[18px] sm:h-[18px]" />
-                      </button>
-                    </div>
-                    {maxQuizUrl && (
+                    )}
+                    {(platform === "both" || platform === "max") && maxQuizUrl && (
                       <div className="flex items-center gap-2 p-3 sm:p-4 rounded-2xl bg-blue-500/5 border border-blue-500/20">
                         <div className="flex-1 truncate font-bold text-xs sm:text-sm text-blue-400 text-left">
                           {maxQuizUrl}
