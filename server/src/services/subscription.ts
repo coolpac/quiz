@@ -97,6 +97,7 @@ async function checkMaxSubscription(
   // Resolve username/link to numeric chat_id if needed
   const { resolveMaxChatId } = await import("../max-bot/handler");
   const numericChatId = await resolveMaxChatId(channelId);
+  console.log(`[max-sub] resolve "${channelId}" → "${numericChatId}" for user ${userId}`);
   if (!numericChatId) {
     return { subscribed: false, status: "chat_not_found" };
   }
@@ -104,6 +105,7 @@ async function checkMaxSubscription(
   try {
     const url = new URL(`https://platform-api.max.ru/chats/${numericChatId}/members`);
     url.searchParams.set("user_ids", userId.toString());
+    console.log(`[max-sub] GET ${url.pathname}?${url.searchParams}`);
 
     const response = await fetch(url.toString(), {
       headers: {

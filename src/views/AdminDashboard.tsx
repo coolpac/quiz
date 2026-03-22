@@ -1093,7 +1093,7 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
                         initial={{ scale: 0.9, y: 20 }}
                         animate={{ scale: 1, y: 0 }}
                         exit={{ scale: 0.9, y: 20 }}
-                        className="w-full max-w-3xl my-auto bg-[#111] border border-white/10 rounded-[2rem] md:rounded-[3rem] p-6 md:p-10 space-y-6 relative"
+                        className="w-full max-w-3xl my-auto bg-[#111] border border-white/10 rounded-2xl md:rounded-[3rem] p-4 md:p-10 space-y-4 md:space-y-6 relative"
                         onClick={(e) => e.stopPropagation()}
                       >
                         <div className="flex items-start justify-between">
@@ -1133,7 +1133,7 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
 
                         <div className={`grid gap-6 ${qrTelegram && qrMax && qrQuiz?.maxDeepLink ? "md:grid-cols-2" : "md:grid-cols-1 max-w-sm mx-auto"}`}>
                           {/* Telegram QR */}
-                          {qrTelegram && <div className="space-y-4 p-5 rounded-2xl bg-white/[0.03] border border-white/10">
+                          {qrTelegram && <div className="space-y-3 md:space-y-4 p-3 md:p-5 rounded-2xl bg-white/[0.03] border border-white/10">
                             <div className="flex items-center justify-between">
                               <div className="flex items-center gap-2">
                                 <div className="w-6 h-6 rounded-md bg-[#2AABEE] flex items-center justify-center">
@@ -1143,10 +1143,10 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
                               </div>
                             </div>
                             <div className="flex justify-center">
-                              <div className="p-5 bg-white rounded-2xl shadow-lg shadow-[#2AABEE]/10">
+                              <div className="p-3 md:p-5 bg-white rounded-xl md:rounded-2xl shadow-lg shadow-[#2AABEE]/10">
                                 <QRCodeSVG
                                   value={qrQuiz?.deepLink ?? ""}
-                                  size={160}
+                                  size={140}
                                   level="H"
                                 />
                               </div>
@@ -1169,7 +1169,7 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
                               </button>
                             </div>
                             <Button
-                              className="w-full py-4 gap-2"
+                              className="w-full py-3 md:py-4 gap-2 text-sm"
                               onClick={() => {
                                 if (qrQuiz?.deepLink) {
                                   window.open(qrQuiz.deepLink, "_blank");
@@ -1182,7 +1182,7 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
 
                           {/* Max QR */}
                           {qrMax && qrQuiz?.maxDeepLink && (
-                            <div className="space-y-4 p-5 rounded-2xl bg-white/[0.03] border border-white/10">
+                            <div className="space-y-3 md:space-y-4 p-3 md:p-5 rounded-2xl bg-white/[0.03] border border-white/10">
                               <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2">
                                   <div className="w-6 h-6 rounded-md bg-blue-600 flex items-center justify-center text-white text-[10px] font-black">M</div>
@@ -1190,8 +1190,8 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
                                 </div>
                               </div>
                               <div className="flex justify-center">
-                                <div className="p-5 bg-white rounded-2xl shadow-lg shadow-blue-500/10">
-                                  <QRCodeSVG value={qrQuiz.maxDeepLink} size={160} level="H" />
+                                <div className="p-3 md:p-5 bg-white rounded-xl md:rounded-2xl shadow-lg shadow-blue-500/10">
+                                  <QRCodeSVG value={qrQuiz.maxDeepLink} size={140} level="H" />
                                 </div>
                               </div>
                               <div className="flex items-center gap-2 p-3 rounded-xl bg-white/5 border border-white/10">
@@ -1210,7 +1210,7 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
                                 </button>
                               </div>
                               <Button
-                                className="w-full py-4 gap-2"
+                                className="w-full py-3 md:py-4 gap-2 text-sm"
                                 onClick={() => {
                                   window.open(qrQuiz.maxDeepLink!, "_blank");
                                 }}
