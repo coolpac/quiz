@@ -82,6 +82,8 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
   const [activeTab, setActiveTab] = useState("dashboard");
   const [livePlayers, setLivePlayers] = useState(0);
   const [showQR, setShowQR] = useState<string | null>(null);
+  const [qrTelegram, setQrTelegram] = useState(true);
+  const [qrMax, setQrMax] = useState(true);
   const [selectedQuizId, setSelectedQuizId] = useState<string | null>(quizId ?? null);
   const [myQuizzes, setMyQuizzes] = useState<MyQuizItem[]>([]);
   const [loadingQuizzes, setLoadingQuizzes] = useState(false);
@@ -1099,9 +1101,24 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
                             <h4 className="text-xl md:text-2xl font-black">
                               {qrQuiz?.title ?? "Квиз"}
                             </h4>
-                            <p className="text-white/40 text-sm font-medium">
-                              Поделитесь квизом с игроками
-                            </p>
+                            <div className="flex items-center gap-2 pt-1">
+                              <button
+                                onClick={() => { hapticSelection(); setQrTelegram(!qrTelegram); }}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wide transition-all ${qrTelegram ? "bg-[#2AABEE]/20 text-[#2AABEE] border border-[#2AABEE]/30" : "bg-white/5 text-white/30 border border-white/10"}`}
+                              >
+                                <svg viewBox="0 0 24 24" fill="currentColor" className="w-3 h-3"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.74-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z"/></svg>
+                                TG
+                              </button>
+                              {qrQuiz?.maxDeepLink && (
+                                <button
+                                  onClick={() => { hapticSelection(); setQrMax(!qrMax); }}
+                                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wide transition-all ${qrMax ? "bg-blue-600/20 text-blue-400 border border-blue-500/30" : "bg-white/5 text-white/30 border border-white/10"}`}
+                                >
+                                  <span className="text-[10px] font-black">M</span>
+                                  Max
+                                </button>
+                              )}
+                            </div>
                           </div>
                           <button
                             onClick={() => {
@@ -1114,9 +1131,9 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
                           </button>
                         </div>
 
-                        <div className={`grid gap-6 ${qrQuiz?.maxDeepLink ? "md:grid-cols-2" : "md:grid-cols-1 max-w-sm mx-auto"}`}>
+                        <div className={`grid gap-6 ${qrTelegram && qrMax && qrQuiz?.maxDeepLink ? "md:grid-cols-2" : "md:grid-cols-1 max-w-sm mx-auto"}`}>
                           {/* Telegram QR */}
-                          <div className="space-y-4 p-5 rounded-2xl bg-white/[0.03] border border-white/10">
+                          {qrTelegram && <div className="space-y-4 p-5 rounded-2xl bg-white/[0.03] border border-white/10">
                             <div className="flex items-center justify-between">
                               <div className="flex items-center gap-2">
                                 <div className="w-6 h-6 rounded-md bg-[#2AABEE] flex items-center justify-center">
@@ -1161,10 +1178,10 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
                             >
                               <ExternalLink size={16} /> Открыть в Telegram
                             </Button>
-                          </div>
+                          </div>}
 
                           {/* Max QR */}
-                          {qrQuiz?.maxDeepLink && (
+                          {qrMax && qrQuiz?.maxDeepLink && (
                             <div className="space-y-4 p-5 rounded-2xl bg-white/[0.03] border border-white/10">
                               <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2">
@@ -1200,6 +1217,11 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
                               >
                                 <ExternalLink size={16} /> Открыть в Max
                               </Button>
+                            </div>
+                          )}
+                          {!qrTelegram && !qrMax && (
+                            <div className="text-center py-8 text-white/30 text-sm font-medium">
+                              Включите платформу кнопками выше
                             </div>
                           )}
                         </div>
