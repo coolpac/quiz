@@ -114,6 +114,8 @@ async function checkMaxSubscription(
     });
 
     if (!response.ok) {
+      const errBody = await response.text().catch(() => "");
+      console.error(`[max-sub] API ${response.status}: ${errBody.slice(0, 200)}`);
       if (response.status === 403) {
         return { subscribed: false, status: "bot_not_admin" };
       }
@@ -125,9 +127,11 @@ async function checkMaxSubscription(
 
     const data = (await response.json()) as MaxMembersResponse;
     const members = data.members ?? [];
+    console.log(`[max-sub] members found: ${members.length}, user_ids: [${members.map(m => m.user_id).join(",")}]`);
     const isMember = members.some(
       (m) => m.user_id?.toString() === userId.toString(),
     );
+    console.log(`[max-sub] user ${userId} isMember=${isMember}`);
 
     return { subscribed: isMember, status: isMember ? "member" : "not_found" };
   } catch (error) {
