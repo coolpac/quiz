@@ -108,9 +108,11 @@ export const validateTelegramInitData = async (
 
   const user = validateInitData(source.data, botToken);
   if (!user) {
+    console.error(`[auth] Invalid initData for platform=${source.platform}, data_length=${source.data.length}, first_50=${source.data.substring(0, 50)}`);
     res.status(401).json({ error: "Invalid initData" });
     return;
   }
+  console.log(`[auth] OK platform=${source.platform} user_id=${user.id} name=${user.first_name}`);
 
   const telegramId = BigInt(user.id);
   const firstName = user.first_name ?? "Player";
