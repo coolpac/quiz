@@ -19,6 +19,7 @@ import { ValidationError, createQuiz, updateQuiz } from "../services/quiz";
 import { calculateScore } from "../services/scoring";
 import { checkSubscription } from "../services/subscription";
 import { getTelegramAvatarUrl } from "../services/telegramAvatar";
+import { getMaxBotUsername } from "../max-bot/handler";
 import {
   clearLeaderboardCache,
   getLeaderboardUpdate,
@@ -94,7 +95,7 @@ router.post("/", adminOnly, async (req, res) => {
     // Используем формат /start {quizId} для автоматической отправки команды боту
     // Это гарантирует, что бот получит команду /start и отправит кнопку
     const deepLink = `https://t.me/${botUsername}?start=${quiz.id}`;
-    const maxBotUsername = process.env.MAX_BOT_USERNAME ?? "";
+    const maxBotUsername = getMaxBotUsername();
     const maxDeepLink = maxBotUsername ? `https://max.ru/${maxBotUsername}?start=${quiz.id}` : null;
     res.json({ id: quiz.id, deepLink, maxDeepLink, adminToken: quiz.adminToken });
   } catch (error) {
@@ -113,7 +114,7 @@ router.get("/my", adminOnly, async (req, res) => {
     return;
   }
   const botUsername = process.env.BOT_USERNAME ?? "";
-  const maxBotUsername = process.env.MAX_BOT_USERNAME ?? "";
+  const maxBotUsername = getMaxBotUsername();
   const now = new Date();
 
   const quizzes = await prisma.quiz.findMany({
@@ -202,6 +203,7 @@ router.get("/:id", async (req, res) => {
         : undefined,
       requiresSubscription: question.requiresSubscription,
       channelUrl: question.requiresSubscription ? quiz.channelUrl ?? undefined : undefined,
+      maxChannelId: question.requiresSubscription ? quiz.maxChannelId ?? undefined : undefined,
       explanation: question.explanation ?? null,
       questionType: question.questionType ?? "multiple_choice",
     };
@@ -732,34 +734,55 @@ router.post("/:id/check-subscription", async (req, res) => {
 
   const quiz = await prisma.quiz.findUnique({
     where: { id },
-    select: { channelUrl: true },
+    select: { channelUrl: true, maxChannelId: true },
   });
   if (!quiz) {
     res.status(404).json({ error: "Quiz not found" });
     return;
   }
 
+  // Resolve channel ID based on platform
   let channelId: string | null = null;
-  const channelUrl = quiz?.channelUrl?.trim();
-  if (channelUrl) {
-    if (channelUrl.startsWith("@")) {
-      channelId = channelUrl;
-    } else {
-      const tgMatch = channelUrl.match(/t\.me\/([^/?]+)/);
-      if (tgMatch) {
-        channelId = `@${tgMatch[1]}`;
-      } else if (/^\d+$/.test(channelUrl)) {
-        // Numeric chat ID (works for both Telegram and Max)
+  const isMax = req.platform === "max";
+
+  if (isMax) {
+    // Max: use dedicated maxChannelId (numeric chat ID)
+    channelId = quiz.maxChannelId?.trim() ?? null;
+    if (!channelId) {
+      // No Max channel configured — let Max users pass through
+      const [result, avatarUrl] = await Promise.all([
+        Promise.resolve({ subscribed: true, status: "max_no_channel" }),
+        getTelegramAvatarUrl(visitor.telegramId, req.platform),
+      ]);
+      const playerName = visitor.username ? `@${visitor.username}` : visitor.firstName;
+      try {
+        getIO().to(adminRoom(id)).emit("admin:subscription", {
+          playerName, avatarUrl, status: result.subscribed ? "success" : "failed", timestamp: new Date(),
+        });
+      } catch {}
+      res.json({ subscribed: result.subscribed });
+      return;
+    }
+  } else {
+    // Telegram: resolve channelUrl to @username format
+    const channelUrl = quiz.channelUrl?.trim();
+    if (channelUrl) {
+      if (channelUrl.startsWith("@")) {
         channelId = channelUrl;
       } else {
-        res.status(400).json({ error: "Invalid channel URL" });
-        return;
+        const tgMatch = channelUrl.match(/t\.me\/([^/?]+)/);
+        if (tgMatch) {
+          channelId = `@${tgMatch[1]}`;
+        } else {
+          res.status(400).json({ error: "Invalid channel URL" });
+          return;
+        }
       }
     }
-  }
-  if (!channelId && !process.env.CHANNEL_ID) {
-    res.status(400).json({ error: "Channel is not configured" });
-    return;
+    if (!channelId && !process.env.CHANNEL_ID) {
+      res.status(400).json({ error: "Channel is not configured" });
+      return;
+    }
   }
 
   const [result, avatarUrl] = await Promise.all([

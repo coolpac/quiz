@@ -18,7 +18,7 @@ import { Button } from "../components/ui/Button";
 import SocketStatusBadge from "../components/SocketStatusBadge";
 import { cn } from "../lib/cn";
 import { useToast, type ToastVariant } from "../components/Toast";
-import { hapticImpact, hapticNotify, hapticSelection, closePlatformApp } from "../lib/telegramUi";
+import { hapticImpact, hapticNotify, hapticSelection, closePlatformApp, isMaxPlatform } from "../lib/telegramUi";
 import type { LiveFeedItem, QuizData, QuizResults } from "../types/quiz";
 
 const teamColors = [
@@ -1072,14 +1072,26 @@ const QuizView = ({ quizId, onFinish, openedFromStartParam }: QuizViewProps) => 
                     наш официальный канал.
                   </p>
                 </div>
-                <a
-                  href={question.channelUrl ?? "#"}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-8 py-4 rounded-xl bg-primary text-white font-bold hover:brightness-110 transition-all shadow-lg shadow-primary/20"
-                >
-                  Перейти в канал <ExternalLink size={18} />
-                </a>
+                {(() => {
+                  const isMax = isMaxPlatform();
+                  // For Max: if maxChannelId is set, we don't have a clickable link
+                  // For Telegram: channelUrl is a t.me link or @username
+                  const channelLink = isMax
+                    ? null // Max channels don't have direct URL from numeric ID
+                    : question.channelUrl?.startsWith("@")
+                      ? `https://t.me/${question.channelUrl.slice(1)}`
+                      : question.channelUrl;
+                  return channelLink ? (
+                    <a
+                      href={channelLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-8 py-4 rounded-xl bg-primary text-white font-bold hover:brightness-110 transition-all shadow-lg shadow-primary/20"
+                    >
+                      Перейти в канал <ExternalLink size={18} />
+                    </a>
+                  ) : null;
+                })()}
                 {isSubscriptionGate && (
                   <Button
                     variant="glass"

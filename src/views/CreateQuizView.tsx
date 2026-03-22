@@ -12,6 +12,7 @@ import {
   Plus,
   Send,
   Timer,
+  Share2,
   Trash2,
   XCircle,
 } from "lucide-react";
@@ -69,8 +70,10 @@ const CreateQuizView = ({ onExit, quizId: editQuizId }: CreateQuizViewProps) => 
     "medium",
   );
   const [isPublic, setIsPublic] = useState(true);
+  const [platform, setPlatform] = useState<"both" | "telegram" | "max">("both");
   const [waitForAdminStart, setWaitForAdminStart] = useState(false);
   const [channelUrl, setChannelUrl] = useState("");
+  const [maxChannelId, setMaxChannelId] = useState("");
   const [enableStreaks, setEnableStreaks] = useState(true);
   const [enablePowerUps, setEnablePowerUps] = useState(false);
   const [enableExplanations, setEnableExplanations] = useState(true);
@@ -218,12 +221,16 @@ const CreateQuizView = ({ onExit, quizId: editQuizId }: CreateQuizViewProps) => 
       }
     }
     if (needsChannelUrl) {
-      if (!channelUrl.trim()) {
-        return "Укажите ссылку на канал для вопросов с подпиской";
+      const trimmedChannel = channelUrl.trim();
+      const trimmedMax = maxChannelId.trim();
+      if (!trimmedChannel && !trimmedMax) {
+        return "Укажите канал Telegram или ID чата Max для проверки подписки";
       }
-      const trimmed = channelUrl.trim();
-      if (!trimmed.startsWith("https://t.me/") && !trimmed.startsWith("@") && !/^\d+$/.test(trimmed)) {
-        return "Укажите ссылку: https://t.me/..., @channelname или числовой ID чата Max";
+      if (trimmedChannel && !trimmedChannel.startsWith("https://t.me/") && !trimmedChannel.startsWith("@")) {
+        return "Telegram канал: https://t.me/... или @channelname";
+      }
+      if (trimmedMax && !/^\d+$/.test(trimmedMax)) {
+        return "ID чата Max должен быть числовым. Используйте /chatid в боте.";
       }
     }
     return null;
@@ -263,6 +270,7 @@ const CreateQuizView = ({ onExit, quizId: editQuizId }: CreateQuizViewProps) => 
         enableTeams,
         teamCount,
         channelUrl: channelUrl.trim() ? channelUrl.trim() : null,
+        maxChannelId: maxChannelId.trim() ? maxChannelId.trim() : null,
         questions: questions.map((question, index) => {
           const filteredOptions = question.options
             .map((opt) => opt.trim())
@@ -961,6 +969,46 @@ const CreateQuizView = ({ onExit, quizId: editQuizId }: CreateQuizViewProps) => 
                         </button>
                       </div>
                     </div>
+
+                    <div className="p-4 sm:p-6 rounded-2xl sm:rounded-[2rem] bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10 space-y-4">
+                      <div className="flex items-center gap-2 sm:gap-3">
+                        <Share2 className="w-4 h-4 sm:w-5 sm:h-5 text-purple-500" />
+                        <span className="font-bold text-sm sm:text-base">Платформа</span>
+                      </div>
+                      <div className="flex items-center justify-between bg-black/5 dark:bg-white/5 p-1 rounded-xl">
+                        {(["both", "telegram", "max"] as const).map((p) => (
+                          <button
+                            key={p}
+                            onClick={() => setPlatform(p)}
+                            className={cn(
+                              "flex-1 py-2 rounded-lg text-[10px] font-black uppercase flex items-center justify-center gap-1",
+                              platform === p
+                                ? "bg-white dark:bg-white/10 shadow-sm"
+                                : "opacity-40",
+                            )}
+                          >
+                            {p === "both" && "Обе"}
+                            {p === "telegram" && (
+                              <>
+                                <svg viewBox="0 0 24 24" fill="currentColor" className="w-3 h-3 text-[#2AABEE]"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.74-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z"/></svg>
+                                TG
+                              </>
+                            )}
+                            {p === "max" && (
+                              <>
+                                <span className="text-blue-400 font-black text-[9px]">M</span>
+                                Max
+                              </>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                      <p className="text-[10px] text-muted-foreground">
+                        {platform === "both" && "QR-коды и ссылки для Telegram и Max"}
+                        {platform === "telegram" && "Только Telegram — ссылка и QR"}
+                        {platform === "max" && "Только Max — ссылка и QR"}
+                      </p>
+                    </div>
                   </div>
 
                   <div className="space-y-3">
@@ -1405,34 +1453,52 @@ const CreateQuizView = ({ onExit, quizId: editQuizId }: CreateQuizViewProps) => 
                     </div>
                   )}
                   {needsChannelUrl && (
-                    <div className="space-y-3 p-5 rounded-[1.5rem] bg-[#229ED9]/10 border-2 border-[#229ED9]/30">
-                      <div className="flex items-center gap-2">
-                        <Lock size={14} className="text-[#229ED9]" />
-                        <label className="text-xs font-black uppercase tracking-widest text-[#229ED9]">
-                          URL канала для проверки подписки
-                          <span className="text-red-500 ml-1">*</span>
-                        </label>
+                    <div className="space-y-4">
+                      {/* Telegram channel */}
+                      <div className="space-y-3 p-5 rounded-[1.5rem] bg-[#229ED9]/10 border-2 border-[#229ED9]/30">
+                        <div className="flex items-center gap-2">
+                          <Lock size={14} className="text-[#229ED9]" />
+                          <label className="text-xs font-black uppercase tracking-widest text-[#229ED9]">
+                            Telegram канал
+                          </label>
+                        </div>
+                        <input
+                          type="text"
+                          placeholder="https://t.me/channel или @channelname"
+                          value={channelUrl}
+                          onChange={(e) => setChannelUrl(e.target.value)}
+                          className="w-full p-3 rounded-xl bg-black/5 dark:bg-white/5 border-2 border-[#229ED9]/20 focus:border-[#229ED9] outline-none font-bold transition-colors"
+                        />
+                        <p className="text-[10px] font-medium opacity-60">
+                          Бот должен быть админом канала
+                        </p>
                       </div>
-                      <input
-                        type="text"
-                        placeholder="https://t.me/channel, @channel или ID чата Max"
-                        value={channelUrl}
-                        onChange={(e) => setChannelUrl(e.target.value)}
-                        className={cn(
-                          "w-full p-3 rounded-xl bg-black/5 dark:bg-white/5 border-2 outline-none font-bold transition-colors",
-                          needsChannelUrl && !channelUrl.trim()
-                            ? "border-red-500/50 focus:border-red-500"
-                            : "border-[#229ED9]/20 focus:border-[#229ED9]",
-                        )}
-                      />
-                      {needsChannelUrl && !channelUrl.trim() && (
+
+                      {/* Max channel */}
+                      <div className="space-y-3 p-5 rounded-[1.5rem] bg-blue-500/10 border-2 border-blue-500/30">
+                        <div className="flex items-center gap-2">
+                          <Lock size={14} className="text-blue-400" />
+                          <label className="text-xs font-black uppercase tracking-widest text-blue-400">
+                            Max канал (ID чата)
+                          </label>
+                        </div>
+                        <input
+                          type="text"
+                          placeholder="Числовой ID чата"
+                          value={maxChannelId}
+                          onChange={(e) => setMaxChannelId(e.target.value)}
+                          className="w-full p-3 rounded-xl bg-black/5 dark:bg-white/5 border-2 border-blue-500/20 focus:border-blue-400 outline-none font-bold transition-colors"
+                        />
+                        <p className="text-[10px] font-medium opacity-60">
+                          Добавьте бота в канал Max и отправьте /chatid
+                        </p>
+                      </div>
+
+                      {!channelUrl.trim() && !maxChannelId.trim() && (
                         <p className="text-[10px] font-bold text-red-500 flex items-center gap-1">
-                          <XCircle size={12} /> Обязательно укажите ссылку на канал
+                          <XCircle size={12} /> Укажите хотя бы один канал
                         </p>
                       )}
-                      <p className="text-[10px] font-medium opacity-60">
-                        TG: https://t.me/channel или @channel | Max: числовой ID чата
-                      </p>
                     </div>
                   )}
                 </div>

@@ -14,6 +14,7 @@ model Quiz {
   timePerQuestion     Int          @default(15)
   isPublic            Boolean      @default(true)
   channelUrl          String?
+  maxChannelId        String?
   adminToken          String       @default(cuid())
   creatorId           String?
   creator             Visitor?     @relation(fields: [creatorId], references: [id])

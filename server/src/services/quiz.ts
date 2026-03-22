@@ -20,6 +20,7 @@ export type CreateQuizInput = {
   timePerQuestion?: number;
   isPublic?: boolean;
   channelUrl?: string | null;
+  maxChannelId?: string | null;
   waitForAdminStart?: boolean;
   questions: CreateQuestionInput[];
   enableStreaks?: boolean;
@@ -53,22 +54,27 @@ const validateQuizInput = (input: CreateQuizInput) => {
   );
   if (hasSubscriptionQuestions) {
     const channelUrl = input.channelUrl?.trim();
+    const maxChannelId = input.maxChannelId?.trim();
     const hasChannelId = Boolean(process.env.CHANNEL_ID);
-    if (!channelUrl && !hasChannelId) {
+    if (!channelUrl && !maxChannelId && !hasChannelId) {
       throw new ValidationError(
-        "Для вопросов с подпиской укажите ссылку на канал или настройте CHANNEL_ID на сервере",
+        "Для вопросов с подпиской укажите канал Telegram или ID чата Max",
       );
     }
     if (channelUrl) {
       const isValidFormat =
         channelUrl.startsWith("https://t.me/") ||
-        channelUrl.startsWith("@") ||
-        /^\d+$/.test(channelUrl);
+        channelUrl.startsWith("@");
       if (!isValidFormat) {
         throw new ValidationError(
-          "Ссылка на канал: https://t.me/..., @channelname или числовой ID чата",
+          "Ссылка на Telegram канал: https://t.me/... или @channelname",
         );
       }
+    }
+    if (maxChannelId && !/^\d+$/.test(maxChannelId)) {
+      throw new ValidationError(
+        "ID чата Max должен быть числовым. Используйте /chatid в боте.",
+      );
     }
   }
   input.questions.forEach((question, index) => {
@@ -104,6 +110,7 @@ export const createQuiz = async (input: CreateQuizInput) => {
       timePerQuestion: input.timePerQuestion ?? 15,
       isPublic: input.isPublic ?? true,
       channelUrl: input.channelUrl ?? null,
+      maxChannelId: input.maxChannelId ?? null,
       waitForAdminStart: input.waitForAdminStart ?? false,
       enableStreaks: input.enableStreaks ?? true,
       enablePowerUps: input.enablePowerUps ?? false,

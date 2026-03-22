@@ -169,6 +169,7 @@ export const api = {
     timePerQuestion: number;
     isPublic: boolean;
     channelUrl?: string | null;
+    maxChannelId?: string | null;
     waitForAdminStart?: boolean;
     enableStreaks?: boolean;
     enablePowerUps?: boolean;
@@ -347,6 +348,7 @@ export const api = {
       timePerQuestion: number;
       isPublic: boolean;
       channelUrl?: string | null;
+      maxChannelId?: string | null;
       waitForAdminStart?: boolean;
       enableStreaks?: boolean;
       enablePowerUps?: boolean;
