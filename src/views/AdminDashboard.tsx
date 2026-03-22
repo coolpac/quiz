@@ -428,64 +428,87 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
     return (
       <div className="admin-shell min-h-screen bg-background text-foreground flex items-center justify-center p-4 sm:p-6 pt-[max(env(safe-area-inset-top,0px),52px)] md:pt-4">
         <div className="w-full max-w-2xl p-6 sm:p-10 rounded-2xl sm:rounded-[2.5rem] bg-white/5 border border-white/10 space-y-6">
-          <div className="space-y-2">
-            <h3 className="text-2xl sm:text-3xl font-black">
-              Выберите квиз для мониторинга
-            </h3>
-            <p className="text-sm text-white/50 font-medium">
-              Найдите квиз из списка и подключитесь к live-данным.
-            </p>
+          <div className="flex items-center justify-between">
+            <div className="space-y-2">
+              <h3 className="text-2xl sm:text-3xl font-black">
+                Панель управления
+              </h3>
+              <p className="text-sm text-white/50 font-medium">
+                Выберите квиз или создайте новый
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                hapticSelection();
+                onExit();
+              }}
+              className="p-3 hover:bg-white/5 rounded-2xl transition-colors"
+            >
+              <LogOut className="w-5 h-5 opacity-40" />
+            </button>
           </div>
-          {loadingQuizzes ? (
-            <div className="p-6 rounded-2xl bg-white/5 text-xs font-bold uppercase tracking-widest text-white/30 text-center">
-              Загрузка...
-            </div>
-          ) : myQuizzes.length === 0 ? (
-            <div className="p-6 rounded-2xl bg-white/5 text-xs font-bold uppercase tracking-widest text-white/30 text-center">
-              Нет созданных квизов
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {myQuizzes.map((quiz) => (
-                <button
-                  key={quiz.id}
-                  onClick={() => {
-                    hapticSelection();
-                    setSelectedQuizId(quiz.id);
-                  }}
-                  className="w-full p-5 rounded-2xl bg-white/5 border border-white/10 hover:border-primary/40 transition-all text-left"
-                >
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="text-lg font-black">{quiz.title}</div>
-                      <div className="text-xs text-white/40 font-bold uppercase tracking-widest">
-                        {quiz.category} • {quiz.questionsCount} вопросов
-                      </div>
-                    </div>
-                    <Badge variant={quiz.isExpired ? "default" : quiz.isActive ? "success" : "default"}>
-                      {quiz.isExpired ? "Завершён" : quiz.isActive ? "Активен" : "Неактивен"}
-                    </Badge>
-                  </div>
-                  <div className="mt-3 text-[10px] font-bold uppercase tracking-widest text-white/40">
-                    Создан:{" "}
-                    {new Date(quiz.createdAt).toLocaleDateString("ru-RU", {
-                      day: "numeric",
-                      month: "long",
-                    })}
-                  </div>
-                </button>
-              ))}
-            </div>
-          )}
+
           <Button
             onClick={() => {
               hapticSelection();
               onCreateQuiz(null);
             }}
-            className="w-full py-4 sm:py-6 text-base sm:text-lg"
+            className="w-full py-4 sm:py-6 text-base sm:text-lg gap-2"
           >
-            Создать новый квиз
+            <Plus size={20} /> Создать новый квиз
           </Button>
+
+          {loadingQuizzes ? (
+            <div className="p-6 rounded-2xl bg-white/5 text-xs font-bold uppercase tracking-widest text-white/30 text-center">
+              Загрузка...
+            </div>
+          ) : myQuizzes.length === 0 ? (
+            <div className="p-8 rounded-2xl bg-white/5 border border-dashed border-white/10 text-center space-y-2">
+              <p className="text-sm text-white/50 font-medium">
+                У вас пока нет квизов
+              </p>
+              <p className="text-xs text-white/30">
+                Создайте первый квиз, чтобы начать
+              </p>
+            </div>
+          ) : (
+            <>
+              <div className="text-xs font-bold uppercase tracking-widest text-white/40">
+                Мои квизы ({myQuizzes.length})
+              </div>
+              <div className="space-y-3">
+                {myQuizzes.map((quiz) => (
+                  <button
+                    key={quiz.id}
+                    onClick={() => {
+                      hapticSelection();
+                      setSelectedQuizId(quiz.id);
+                    }}
+                    className="w-full p-5 rounded-2xl bg-white/5 border border-white/10 hover:border-primary/40 transition-all text-left"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="text-lg font-black">{quiz.title}</div>
+                        <div className="text-xs text-white/40 font-bold uppercase tracking-widest">
+                          {quiz.category} • {quiz.questionsCount} вопросов
+                        </div>
+                      </div>
+                      <Badge variant={quiz.isExpired ? "default" : quiz.isActive ? "success" : "default"}>
+                        {quiz.isExpired ? "Завершён" : quiz.isActive ? "Активен" : "Неактивен"}
+                      </Badge>
+                    </div>
+                    <div className="mt-3 text-[10px] font-bold uppercase tracking-widest text-white/40">
+                      Создан:{" "}
+                      {new Date(quiz.createdAt).toLocaleDateString("ru-RU", {
+                        day: "numeric",
+                        month: "long",
+                      })}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
         </div>
       </div>
     );
@@ -1058,7 +1081,7 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       exit={{ opacity: 0 }}
-                      className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/80 backdrop-blur-md"
+                      className="fixed inset-0 z-[100] flex items-center justify-center p-4 md:p-6 bg-black/80 backdrop-blur-md"
                       onClick={() => {
                         hapticSelection();
                         setShowQR(null);
@@ -1068,49 +1091,55 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
                         initial={{ scale: 0.9, y: 20 }}
                         animate={{ scale: 1, y: 0 }}
                         exit={{ scale: 0.9, y: 20 }}
-                        className="w-full max-w-sm bg-[#111] border border-white/10 rounded-[3rem] p-8 space-y-8 relative overflow-hidden"
+                        className="w-full max-w-3xl bg-[#111] border border-white/10 rounded-[2rem] md:rounded-[3rem] p-6 md:p-10 space-y-6 relative overflow-hidden"
                         onClick={(e) => e.stopPropagation()}
                       >
-                        <div className="absolute top-0 right-0 p-6">
+                        <div className="flex items-start justify-between">
+                          <div className="space-y-1">
+                            <h4 className="text-xl md:text-2xl font-black">
+                              {qrQuiz?.title ?? "Квиз"}
+                            </h4>
+                            <p className="text-white/40 text-sm font-medium">
+                              Поделитесь квизом с игроками
+                            </p>
+                          </div>
                           <button
                             onClick={() => {
                               hapticSelection();
                               setShowQR(null);
                             }}
-                            className="p-2 hover:bg-black/5 dark:hover:bg-white/5 rounded-full transition-colors"
+                            className="p-2 hover:bg-white/5 rounded-full transition-colors shrink-0"
                           >
                             <XCircle className="w-6 h-6 opacity-30" />
                           </button>
                         </div>
 
-                        <div className="text-center space-y-2">
-                          <h4 className="text-2xl font-black">
-                            {qrQuiz?.title ?? "Квиз"}
-                          </h4>
-                          <p className="text-white/40 text-sm font-medium">
-                            Поделитесь квизом с игроками
-                          </p>
-                        </div>
-
-                        <div className="flex flex-col items-center gap-6">
+                        <div className={`grid gap-6 ${qrQuiz?.maxDeepLink ? "md:grid-cols-2" : "md:grid-cols-1 max-w-sm mx-auto"}`}>
                           {/* Telegram QR */}
-                          <div className="w-full space-y-3">
-                            <div className="text-[10px] font-bold uppercase tracking-widest text-white/40 text-center">Telegram</div>
+                          <div className="space-y-4 p-5 rounded-2xl bg-white/[0.03] border border-white/10">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <div className="w-6 h-6 rounded-md bg-[#2AABEE] flex items-center justify-center">
+                                  <svg viewBox="0 0 24 24" fill="white" className="w-3.5 h-3.5"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.74-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z"/></svg>
+                                </div>
+                                <span className="text-xs font-bold uppercase tracking-widest text-white/60">Telegram</span>
+                              </div>
+                            </div>
                             <div className="flex justify-center">
-                              <div className="p-6 bg-white rounded-[2.5rem] shadow-2xl shadow-primary/20">
+                              <div className="p-5 bg-white rounded-2xl shadow-lg shadow-[#2AABEE]/10">
                                 <QRCodeSVG
                                   value={qrQuiz?.deepLink ?? ""}
-                                  size={180}
+                                  size={160}
                                   level="H"
                                 />
                               </div>
                             </div>
-                            <div className="flex items-center gap-2 p-4 rounded-2xl bg-white/5 border border-white/10">
-                              <div className="flex-1 truncate font-bold text-xs text-white/40">
+                            <div className="flex items-center gap-2 p-3 rounded-xl bg-white/5 border border-white/10">
+                              <div className="flex-1 truncate font-mono text-[11px] text-white/40">
                                 {qrQuiz?.deepLink ?? "—"}
                               </div>
                               <button
-                                className="p-2 hover:bg-primary/10 hover:text-primary rounded-xl transition-all"
+                                className="p-1.5 hover:bg-primary/10 hover:text-primary rounded-lg transition-all"
                                 onClick={() => {
                                   hapticSelection();
                                   if (qrQuiz?.deepLink) {
@@ -1119,52 +1148,57 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
                                   }
                                 }}
                               >
-                                <Copy size={16} />
+                                <Copy size={14} />
                               </button>
                             </div>
                             <Button
-                              className="w-full py-6 text-lg gap-2"
+                              className="w-full py-4 gap-2"
                               onClick={() => {
                                 if (qrQuiz?.deepLink) {
                                   window.open(qrQuiz.deepLink, "_blank");
                                 }
                               }}
                             >
-                              <ExternalLink size={20} /> Открыть в Telegram
+                              <ExternalLink size={16} /> Открыть в Telegram
                             </Button>
                           </div>
 
                           {/* Max QR */}
                           {qrQuiz?.maxDeepLink && (
-                            <div className="w-full space-y-3 pt-4 border-t border-white/10">
-                              <div className="text-[10px] font-bold uppercase tracking-widest text-white/40 text-center">Max</div>
-                              <div className="flex justify-center">
-                                <div className="p-6 bg-white rounded-[2.5rem] shadow-2xl shadow-blue-500/20">
-                                  <QRCodeSVG value={qrQuiz.maxDeepLink} size={180} level="H" />
+                            <div className="space-y-4 p-5 rounded-2xl bg-white/[0.03] border border-white/10">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-6 h-6 rounded-md bg-blue-600 flex items-center justify-center text-white text-[10px] font-black">M</div>
+                                  <span className="text-xs font-bold uppercase tracking-widest text-white/60">Max</span>
                                 </div>
                               </div>
-                              <div className="flex items-center gap-2 p-4 rounded-2xl bg-white/5 border border-white/10">
-                                <div className="flex-1 truncate font-bold text-xs text-white/40">
+                              <div className="flex justify-center">
+                                <div className="p-5 bg-white rounded-2xl shadow-lg shadow-blue-500/10">
+                                  <QRCodeSVG value={qrQuiz.maxDeepLink} size={160} level="H" />
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2 p-3 rounded-xl bg-white/5 border border-white/10">
+                                <div className="flex-1 truncate font-mono text-[11px] text-white/40">
                                   {qrQuiz.maxDeepLink}
                                 </div>
                                 <button
-                                  className="p-2 hover:bg-blue-500/10 hover:text-blue-400 rounded-xl transition-all"
+                                  className="p-1.5 hover:bg-blue-500/10 hover:text-blue-400 rounded-lg transition-all"
                                   onClick={() => {
                                     hapticSelection();
                                     navigator.clipboard.writeText(qrQuiz.maxDeepLink!);
                                     pushToast("Ссылка Max скопирована", "success");
                                   }}
                                 >
-                                  <Copy size={16} />
+                                  <Copy size={14} />
                                 </button>
                               </div>
                               <Button
-                                className="w-full py-6 text-lg gap-2"
+                                className="w-full py-4 gap-2"
                                 onClick={() => {
                                   window.open(qrQuiz.maxDeepLink!, "_blank");
                                 }}
                               >
-                                <ExternalLink size={20} /> Открыть в Max
+                                <ExternalLink size={16} /> Открыть в Max
                               </Button>
                             </div>
                           )}
