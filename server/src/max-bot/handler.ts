@@ -374,27 +374,37 @@ export async function resolveMaxChatId(input: string): Promise<string | null> {
   const trimmed = input.replace(/^@/, "").trim();
   if (!trimmed) return null;
 
-  // Already numeric — return as-is
-  if (/^-?\d+$/.test(trimmed)) return trimmed;
+  // Already a negative numeric ID — return as-is (Max channels have negative IDs)
+  if (/^-\d+$/.test(trimmed)) return trimmed;
 
   // Check cache
   const cached = _chatIdCache.get(trimmed);
   if (cached) return cached;
 
+  // Resolve via GET /chats — match by link suffix, title, or absolute chat_id value
   try {
     const client = getMaxBotClient();
     const { chats } = await client.getChats();
 
     for (const chat of chats) {
       const linkSuffix = chat.link?.replace(/^https?:\/\/max\.ru\//, "");
-      if (linkSuffix === trimmed || chat.title === trimmed) {
+      const absChatId = Math.abs(chat.chat_id).toString();
+      if (linkSuffix === trimmed || chat.title === trimmed || absChatId === trimmed) {
         const id = chat.chat_id.toString();
         _chatIdCache.set(trimmed, id);
+        console.log(`[Max bot] Resolved "${trimmed}" → chat_id ${id}`);
         return id;
       }
     }
   } catch (err) {
     console.error("[Max bot] Failed to resolve chat ID:", err instanceof Error ? err.message : String(err));
+  }
+
+  // If input looks like a positive number, try negating it (Max channel IDs are negative)
+  if (/^\d+$/.test(trimmed)) {
+    const negated = `-${trimmed}`;
+    console.log(`[Max bot] Trying negated chat_id: ${negated}`);
+    return negated;
   }
 
   return null;
