@@ -71,11 +71,7 @@ const validateQuizInput = (input: CreateQuizInput) => {
         );
       }
     }
-    if (maxChannelId && !/^\d+$/.test(maxChannelId)) {
-      throw new ValidationError(
-        "ID чата Max должен быть числовым. Используйте /chatid в боте.",
-      );
-    }
+    // maxChannelId: accept numeric ID or @username — strip @ before storing
   }
   input.questions.forEach((question, index) => {
     const text = question.text.trim();
@@ -110,7 +106,7 @@ export const createQuiz = async (input: CreateQuizInput) => {
       timePerQuestion: input.timePerQuestion ?? 15,
       isPublic: input.isPublic ?? true,
       channelUrl: input.channelUrl ?? null,
-      maxChannelId: input.maxChannelId ?? null,
+      maxChannelId: input.maxChannelId?.replace(/^@/, "") ?? null,
       waitForAdminStart: input.waitForAdminStart ?? false,
       enableStreaks: input.enableStreaks ?? true,
       enablePowerUps: input.enablePowerUps ?? false,

@@ -229,12 +229,11 @@ const CreateQuizView = ({ onExit, quizId: editQuizId }: CreateQuizViewProps) => 
       if (trimmedChannel && !trimmedChannel.startsWith("https://t.me/") && !trimmedChannel.startsWith("@")) {
         return "Telegram канал: https://t.me/... или @channelname";
       }
-      if (trimmedMax && !/^\d+$/.test(trimmedMax)) {
-        return "ID чата Max должен быть числовым. Используйте /chatid в боте.";
-      }
+      // Max channel: accept numeric ID or @username (stripped of @)
+      // No strict validation — server will try to use it
     }
     return null;
-  }, [category, channelUrl, needsChannelUrl, questions, quizName]);
+  }, [category, channelUrl, maxChannelId, needsChannelUrl, questions, quizName]);
 
   const handlePublish = async () => {
     hapticSelection();
@@ -1489,13 +1488,13 @@ const CreateQuizView = ({ onExit, quizId: editQuizId }: CreateQuizViewProps) => 
                         </div>
                         <input
                           type="text"
-                          placeholder="Числовой ID чата"
+                          placeholder="ID чата или @username канала"
                           value={maxChannelId}
                           onChange={(e) => setMaxChannelId(e.target.value)}
                           className="w-full p-3 rounded-xl bg-black/5 dark:bg-white/5 border-2 border-blue-500/20 focus:border-blue-400 outline-none font-bold transition-colors"
                         />
                         <p className="text-[10px] font-medium opacity-60">
-                          Добавьте бота в канал Max и отправьте /chatid
+                          Бот должен быть участником канала. /chatid покажет ID.
                         </p>
                       </div>
 
