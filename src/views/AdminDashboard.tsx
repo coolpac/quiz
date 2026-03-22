@@ -1083,7 +1083,7 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       exit={{ opacity: 0 }}
-                      className="fixed inset-0 z-[100] flex items-center justify-center p-4 md:p-6 bg-black/80 backdrop-blur-md"
+                      className="fixed inset-0 z-[100] flex items-start md:items-center justify-center overflow-y-auto p-4 md:p-6 bg-black/80 backdrop-blur-md"
                       onClick={() => {
                         hapticSelection();
                         setShowQR(null);
@@ -1093,7 +1093,7 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
                         initial={{ scale: 0.9, y: 20 }}
                         animate={{ scale: 1, y: 0 }}
                         exit={{ scale: 0.9, y: 20 }}
-                        className="w-full max-w-3xl bg-[#111] border border-white/10 rounded-[2rem] md:rounded-[3rem] p-6 md:p-10 space-y-6 relative overflow-hidden"
+                        className="w-full max-w-3xl my-auto bg-[#111] border border-white/10 rounded-[2rem] md:rounded-[3rem] p-6 md:p-10 space-y-6 relative"
                         onClick={(e) => e.stopPropagation()}
                       >
                         <div className="flex items-start justify-between">
