@@ -102,7 +102,7 @@ const HomeView = ({ onStart, onAdmin, onCreate, onPlayQuiz, isAdmin, hasQuizId }
   };
 
   return (
-    <div className="fx-scroll flex flex-col items-center justify-start md:justify-center min-h-[100dvh] w-full max-w-7xl mx-auto px-6 py-10 relative overflow-x-hidden overflow-y-auto overscroll-y-contain">
+    <div className="flex flex-col items-center justify-start min-h-[100dvh] w-full max-w-7xl mx-auto px-6 py-10 relative">
       <div className="fx-blob absolute top-1/4 left-1/4 w-64 h-64 bg-primary/20 dark:bg-primary/30 rounded-full blur-[120px] animate-pulse pointer-events-none" />
       <div className="fx-blob absolute bottom-1/4 right-1/4 w-96 h-96 bg-purple-600/10 dark:bg-purple-600/20 rounded-full blur-[150px] pointer-events-none" />
 
@@ -121,7 +121,22 @@ const HomeView = ({ onStart, onAdmin, onCreate, onPlayQuiz, isAdmin, hasQuizId }
           </span>
         </div>
 
-        <h1 className="text-6xl md:text-8xl font-black tracking-tighter leading-[0.85] text-foreground">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.6, ease: "easeOut" }}
+          className="relative mx-auto"
+        >
+          <div className="absolute inset-0 bg-primary/20 blur-[60px] rounded-full pointer-events-none scale-75" />
+          <img
+            src="/elephant-hero.png"
+            alt="Кибер Слон"
+            className="relative w-28 h-28 md:w-52 md:h-52 object-contain mx-auto drop-shadow-2xl"
+            draggable={false}
+          />
+        </motion.div>
+
+        <h1 className="text-5xl md:text-8xl font-black tracking-tighter leading-[0.85] text-foreground">
           <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary via-purple-400 to-pink-500">
             Кибер Слон
           </span>

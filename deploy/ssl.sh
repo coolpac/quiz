@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-DOMAIN="${DOMAIN:-annaivaschenko.ru}"
+DOMAIN="${DOMAIN:-cyberslon.ru}"
 EMAIL="${EMAIL:-admin@${DOMAIN}}"
 UPSTREAM_PORT="${UPSTREAM_PORT:-8080}"
 

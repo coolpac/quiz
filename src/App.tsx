@@ -7,6 +7,7 @@ import { ToastProvider } from "./components/Toast";
 import type { QuizResults } from "./types/quiz";
 import LoadingScreen from "./components/LoadingScreen";
 
+
 const AdminDashboard = lazy(() => import("./views/AdminDashboard"));
 const CreateQuizView = lazy(() => import("./views/CreateQuizView"));
 const ResultView = lazy(() => import("./views/ResultView"));
@@ -145,7 +146,7 @@ function App({
 
   return (
     <ToastProvider>
-      <div className="min-h-screen w-full bg-background text-foreground font-sans selection:bg-primary/30 overflow-x-hidden">
+      <div className="min-h-screen w-full bg-background text-foreground font-sans selection:bg-primary/30 relative">
         <Suspense fallback={<LoadingSpinner />}>
           {view === "home" && (
             <HomeView
