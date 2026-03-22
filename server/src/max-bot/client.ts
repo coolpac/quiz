@@ -114,6 +114,20 @@ export class MaxBotClient {
     return this.request("GET", "/me");
   }
 
+  /** GET /chats — list bot's chats */
+  async getChats(): Promise<{ chats: Array<{ chat_id: number; type: string; title: string; link?: string; is_public?: boolean }> }> {
+    return this.request("GET", "/chats");
+  }
+
+  /** GET /chats/{chatId}/members — get chat members, optionally filtered by user_ids */
+  async getChatMembers(chatId: string, userIds?: number[]): Promise<{ members: Array<{ user_id: number; name?: string }> }> {
+    const query: Record<string, string> = {};
+    if (userIds?.length) {
+      query.user_ids = userIds.join(",");
+    }
+    return this.request("GET", `/chats/${chatId}/members`, undefined, query);
+  }
+
   /** PATCH /me — update bot info (name, description, commands) */
   async editBotInfo(info: {
     name?: string;

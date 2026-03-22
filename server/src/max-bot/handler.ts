@@ -363,6 +363,43 @@ async function sendQuizInfo(client: MaxBotClient, chatId: number, quizId: string
   );
 }
 
+/** Cache of link → numeric chat_id mappings */
+const _chatIdCache = new Map<string, string>();
+
+/**
+ * Resolve a Max channel identifier (link, username, or numeric ID) to a numeric chat_id.
+ * Uses GET /chats to find matching channel by link.
+ */
+export async function resolveMaxChatId(input: string): Promise<string | null> {
+  const trimmed = input.replace(/^@/, "").trim();
+  if (!trimmed) return null;
+
+  // Already numeric — return as-is
+  if (/^-?\d+$/.test(trimmed)) return trimmed;
+
+  // Check cache
+  const cached = _chatIdCache.get(trimmed);
+  if (cached) return cached;
+
+  try {
+    const client = getMaxBotClient();
+    const { chats } = await client.getChats();
+
+    for (const chat of chats) {
+      const linkSuffix = chat.link?.replace(/^https?:\/\/max\.ru\//, "");
+      if (linkSuffix === trimmed || chat.title === trimmed) {
+        const id = chat.chat_id.toString();
+        _chatIdCache.set(trimmed, id);
+        return id;
+      }
+    }
+  } catch (err) {
+    console.error("[Max bot] Failed to resolve chat ID:", err instanceof Error ? err.message : String(err));
+  }
+
+  return null;
+}
+
 /** Resolved Max bot username, populated at startup via GET /me */
 let _maxBotUsername: string | null = null;
 
