@@ -15,7 +15,7 @@ const ResultView = lazy(() => import("./views/ResultView"));
 const LoadingSpinner = () => <LoadingScreen progress={100} message="Загрузка модуля..." />;
 
 /** Минимум, сколько держим экран загрузки (мс). Увеличьте, если нужно дольше смотреть анимацию. */
-const MIN_LOADING_MS = 5000;
+const MIN_LOADING_MS = 500;
 
 function App({
   initialQuizId,
