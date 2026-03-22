@@ -7,6 +7,14 @@ type ChatMemberResponse = {
   description?: string;
 };
 
+type MaxMembersResponse = {
+  members?: Array<{
+    user_id?: number;
+    name?: string;
+    username?: string;
+  }>;
+};
+
 const allowedStatuses = new Set([
   "member",
   "administrator",
@@ -15,10 +23,18 @@ const allowedStatuses = new Set([
 
 const deniedStatuses = new Set(["left", "kicked"]);
 
+/**
+ * Check subscription for Telegram users via Telegram Bot API getChatMember.
+ */
 export const checkSubscription = async (
   telegramId: bigint,
   channelId?: string | null,
+  platform?: string,
 ) => {
+  if (platform === "max") {
+    return checkMaxSubscription(telegramId, channelId);
+  }
+
   const botToken = process.env.BOT_TOKEN;
   const resolvedChannelId = channelId ?? process.env.CHANNEL_ID;
 
@@ -64,3 +80,51 @@ export const checkSubscription = async (
     return { subscribed: false, status: "network_error" };
   }
 };
+
+/**
+ * Check subscription for Max users via Max Bot API GET /chats/{chatId}/members?user_ids=...
+ * The chatId must be a numeric Max chat/channel ID.
+ */
+async function checkMaxSubscription(
+  userId: bigint,
+  channelId?: string | null,
+) {
+  const maxBotToken = process.env.MAX_BOT_TOKEN;
+  if (!maxBotToken || !channelId) {
+    return { subscribed: false, status: "missing_config" };
+  }
+
+  // channelId for Max should be numeric chat ID
+  const numericChatId = channelId.replace(/^@/, "");
+
+  try {
+    const url = new URL(`https://platform-api.max.ru/chats/${numericChatId}/members`);
+    url.searchParams.set("user_ids", userId.toString());
+
+    const response = await fetch(url.toString(), {
+      headers: {
+        Authorization: maxBotToken,
+      },
+    });
+
+    if (!response.ok) {
+      if (response.status === 403) {
+        return { subscribed: false, status: "bot_not_admin" };
+      }
+      if (response.status === 404) {
+        return { subscribed: false, status: "not_found" };
+      }
+      return { subscribed: false, status: "request_failed" };
+    }
+
+    const data = (await response.json()) as MaxMembersResponse;
+    const members = data.members ?? [];
+    const isMember = members.some(
+      (m) => m.user_id?.toString() === userId.toString(),
+    );
+
+    return { subscribed: isMember, status: isMember ? "member" : "not_found" };
+  } catch (error) {
+    return { subscribed: false, status: "network_error" };
+  }
+}

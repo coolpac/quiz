@@ -462,7 +462,7 @@ router.post("/:id/answer", answerLimiter, async (req, res) => {
 
   if (attempt.isFirstAttempt) {
     const playerName = visitor.username ? `@${visitor.username}` : visitor.firstName;
-    const avatarUrl = await getTelegramAvatarUrl(visitor.telegramId);
+    const avatarUrl = await getTelegramAvatarUrl(visitor.telegramId, req.platform);
     if (!quiz.selfPaced) {
       emitAnswerEvents({
         quizId: id,
@@ -745,9 +745,12 @@ router.post("/:id/check-subscription", async (req, res) => {
     if (channelUrl.startsWith("@")) {
       channelId = channelUrl;
     } else {
-      const match = channelUrl.match(/t\.me\/([^/?]+)/);
-      if (match) {
-        channelId = `@${match[1]}`;
+      const tgMatch = channelUrl.match(/t\.me\/([^/?]+)/);
+      if (tgMatch) {
+        channelId = `@${tgMatch[1]}`;
+      } else if (/^\d+$/.test(channelUrl)) {
+        // Numeric chat ID (works for both Telegram and Max)
+        channelId = channelUrl;
       } else {
         res.status(400).json({ error: "Invalid channel URL" });
         return;
@@ -760,8 +763,8 @@ router.post("/:id/check-subscription", async (req, res) => {
   }
 
   const [result, avatarUrl] = await Promise.all([
-    checkSubscription(visitor.telegramId, channelId),
-    getTelegramAvatarUrl(visitor.telegramId),
+    checkSubscription(visitor.telegramId, channelId, req.platform),
+    getTelegramAvatarUrl(visitor.telegramId, req.platform),
   ]);
   const playerName = visitor.username ? `@${visitor.username}` : visitor.firstName;
 

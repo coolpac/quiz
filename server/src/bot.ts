@@ -8,11 +8,7 @@ const adminIds = (process.env.ADMIN_IDS ?? "")
   .map((id) => id.trim())
   .filter(Boolean);
 
-if (!botToken) {
-  throw new Error("BOT_TOKEN is not configured");
-}
-
-export const bot = new Bot(botToken);
+export const bot = botToken ? new Bot(botToken) : null;
 
 const extractStartParam = (text?: string) => {
   if (!text) {
@@ -25,6 +21,8 @@ const extractStartParam = (text?: string) => {
   const startAppMatch = rest.match(/startapp=([^\s&]+)/i);
   return startAppMatch ? startAppMatch[1] : rest;
 };
+
+if (bot) {
 
 bot.command("start", async (ctx) => {
   // Получаем параметр из команды /start {param}
@@ -176,4 +174,6 @@ bot.catch((err) => {
   console.error("Bot error:", e);
 });
 
-export const telegramWebhook = webhookCallback(bot, "express");
+} // end if (bot)
+
+export const telegramWebhook = bot ? webhookCallback(bot, "express") : null;

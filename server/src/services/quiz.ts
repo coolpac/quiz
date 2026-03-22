@@ -61,10 +61,12 @@ const validateQuizInput = (input: CreateQuizInput) => {
     }
     if (channelUrl) {
       const isValidFormat =
-        channelUrl.startsWith("https://t.me/") || channelUrl.startsWith("@");
+        channelUrl.startsWith("https://t.me/") ||
+        channelUrl.startsWith("@") ||
+        /^\d+$/.test(channelUrl);
       if (!isValidFormat) {
         throw new ValidationError(
-          "Ссылка на канал должна быть в формате https://t.me/... или @channelname",
+          "Ссылка на канал: https://t.me/..., @channelname или числовой ID чата",
         );
       }
     }

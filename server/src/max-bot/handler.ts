@@ -49,7 +49,12 @@ export async function handleMaxUpdate(update: MaxUpdate): Promise<void> {
         console.log("[Max bot] unhandled update type:", update.update_type);
     }
   } catch (err) {
-    console.error("[Max bot] handler error:", update.update_type, err instanceof Error ? err.message : String(err));
+    // Gracefully ignore expected errors (user blocked bot, deactivated, etc.)
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes("403") || msg.includes("blocked") || msg.includes("deactivated")) {
+      return;
+    }
+    console.error("[Max bot] handler error:", update.update_type, msg);
   }
 }
 
@@ -64,7 +69,14 @@ async function handleMessage(client: MaxBotClient, update: MaxUpdate): Promise<v
   const text = msg.body.text.trim();
   const userName = msg.sender.name || "друг";
 
-  if (text === "/start") {
+  // Support /start <quizId> text command (like Telegram)
+  if (text === "/start" || text.startsWith("/start ")) {
+    const startParam = text.replace(/^\/start\s*/i, "").trim();
+    if (startParam) {
+      await sendQuizInfo(client, chatId, startParam);
+      return;
+    }
+
     const isAdmin = isMaxAdmin(msg.sender.user_id);
     await client.sendMessage(
       chatId,
@@ -224,7 +236,7 @@ async function handleBotStarted(client: MaxBotClient, update: MaxUpdate): Promis
 }
 
 /**
- * Send a list of active public quizzes as callback buttons.
+ * Send a list of active public quizzes as link buttons (1-tap, like Telegram).
  */
 async function sendActiveQuizzes(client: MaxBotClient, chatId: number): Promise<void> {
   const now = new Date();
@@ -238,33 +250,30 @@ async function sendActiveQuizzes(client: MaxBotClient, chatId: number): Promise<
   if (quizzes.length === 0) {
     await client.sendMessage(
       chatId,
-      "😔 Сейчас нет активных квизов.\n\nЗагляни позже или создай свой!",
-      {
-        buttons: [
-          [
-            {
-              type: "open_app",
-              text: "➕ Создать квиз",
-              url: APP_URL,
-            },
-          ],
-        ],
-      }
+      "😔 Сейчас нет активных квизов.\n\nЗагляни позже!",
     );
     return;
   }
 
+  const maxBotUsername = process.env.MAX_BOT_USERNAME ?? "";
+
   const buttons = quizzes.map((quiz) => [
-    {
-      type: "callback" as const,
-      text: `🎯 ${quiz.title} (${quiz._count.questions} вопр.)`,
-      payload: `quiz:${quiz.id}`,
-    },
+    maxBotUsername
+      ? {
+          type: "link" as const,
+          text: `🎯 ${quiz.title} (${quiz._count.questions} вопр.)`,
+          url: `https://max.ru/${maxBotUsername}?start=${quiz.id}`,
+        }
+      : {
+          type: "callback" as const,
+          text: `🎯 ${quiz.title} (${quiz._count.questions} вопр.)`,
+          payload: `quiz:${quiz.id}`,
+        },
   ]);
 
   await client.sendMessage(
     chatId,
-    `📋 **Активные квизы** (${quizzes.length}):\n\nВыбери квиз чтобы узнать подробности:`,
+    `📋 **Активные квизы** (${quizzes.length}):\n\nВыбери квиз чтобы начать:`,
     {
       format: "markdown",
       buttons,
@@ -274,6 +283,7 @@ async function sendActiveQuizzes(client: MaxBotClient, chatId: number): Promise<
 
 /**
  * Show quiz details and an open_app button to play.
+ * Includes expiry check (like Telegram bot).
  */
 async function sendQuizInfo(client: MaxBotClient, chatId: number, quizId: string): Promise<void> {
   const quiz = await prisma.quiz.findUnique({
@@ -283,8 +293,8 @@ async function sendQuizInfo(client: MaxBotClient, chatId: number, quizId: string
     },
   });
 
-  if (!quiz) {
-    await client.sendMessage(chatId, "❌ Квиз не найден или был удалён.", {
+  if (!quiz || quiz.expiresAt < new Date()) {
+    await client.sendMessage(chatId, "❌ Квиз не найден или уже завершен.", {
       buttons: [
         [
           {
@@ -305,6 +315,7 @@ async function sendQuizInfo(client: MaxBotClient, chatId: number, quizId: string
     `🎯 **${quiz.title}**\n` +
       categoryText +
       `\n❓ Вопросов: **${quiz._count.questions}**` +
+      `\n⏱ ${quiz.timePerQuestion}с на ответ` +
       `\n👥 Игроков: **${quiz._count.attempts}**`,
     {
       format: "markdown",

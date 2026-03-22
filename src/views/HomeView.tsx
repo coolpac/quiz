@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   ChevronRight,
   HelpCircle,
@@ -8,6 +8,7 @@ import {
   Settings,
   Trophy,
   Users,
+  X,
   Zap,
 } from "lucide-react";
 import { Button } from "../components/ui/Button";
@@ -42,12 +43,13 @@ const difficultyColor: Record<string, string> = {
 
 const HomeView = ({ onStart, onAdmin, onCreate, onPlayQuiz, isAdmin, hasQuizId }: HomeViewProps) => {
   const [quizzes, setQuizzes] = useState<ActiveQuiz[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [onlineCount, setOnlineCount] = useState<number | null>(null);
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<"newest" | "popular">("newest");
   const [recentQuizzes, setRecentQuizzes] = useState<string[]>([]);
+  const [showQuizList, setShowQuizList] = useState(false);
 
   const categories = useMemo(() => {
     const cats = [...new Set(quizzes.map(q => q.category))];
@@ -69,13 +71,14 @@ const HomeView = ({ onStart, onAdmin, onCreate, onPlayQuiz, isAdmin, hasQuizId }
     return result;
   }, [quizzes, search, selectedCategory, sortBy]);
 
-  useEffect(() => {
+  const loadQuizzes = () => {
+    setLoading(true);
     api
       .getActiveQuizzes()
       .then((data) => setQuizzes(data.quizzes ?? []))
       .catch(() => setQuizzes([]))
       .finally(() => setLoading(false));
-  }, []);
+  };
 
   useEffect(() => {
     fetch(`${import.meta.env.VITE_API_URL ?? ""}/api/stats/online`)
@@ -90,6 +93,16 @@ const HomeView = ({ onStart, onAdmin, onCreate, onPlayQuiz, isAdmin, hasQuizId }
       setRecentQuizzes(stored.slice(0, 5));
     } catch { setRecentQuizzes([]); }
   }, []);
+
+  const handlePlayClick = () => {
+    hapticSelection();
+    if (hasQuizId) {
+      onStart();
+    } else {
+      loadQuizzes();
+      setShowQuizList(true);
+    }
+  };
 
   const handlePlayQuiz = (quizId: string) => {
     hapticSelection();
@@ -149,10 +162,7 @@ const HomeView = ({ onStart, onAdmin, onCreate, onPlayQuiz, isAdmin, hasQuizId }
         <div className="flex flex-col sm:flex-row gap-4 justify-center pt-4 px-4">
           <div className="flex flex-col items-center gap-2 w-full sm:w-auto">
             <Button
-              onClick={() => {
-                hapticSelection();
-                onStart();
-              }}
+              onClick={handlePlayClick}
               size="lg"
               className="group px-10 bg-gradient-to-r from-primary to-purple-600 w-full sm:w-auto"
             >
@@ -161,7 +171,7 @@ const HomeView = ({ onStart, onAdmin, onCreate, onPlayQuiz, isAdmin, hasQuizId }
             </Button>
             {!hasQuizId && (
               <p className="text-xs text-muted-foreground font-medium text-center px-2">
-                Перейдите по ссылке квиза от бота, чтобы начать игру
+                Перейдите по ссылке квиза, чтобы начать игру
               </p>
             )}
           </div>
@@ -193,139 +203,159 @@ const HomeView = ({ onStart, onAdmin, onCreate, onPlayQuiz, isAdmin, hasQuizId }
           )}
         </div>
 
-        {/* Active quizzes section */}
-        <div className="w-full pt-4 text-left">
-          <h2 className="text-xl font-black text-foreground px-1">Активные квизы</h2>
-          <p className="text-xs text-muted-foreground font-medium mt-1 px-1">
-            Выберите квиз и начните играть
-          </p>
-
-          {/* Search */}
-          <div className="relative mt-3">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Поиск квиза..."
-              className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-white/5 border border-white/10 text-sm focus:border-primary/50 outline-none transition-colors placeholder:text-white/30"
-            />
-          </div>
-
-          {/* Category pills + sort */}
-          <div className="flex items-center gap-2 mt-3 overflow-x-auto scrollbar-none pb-1">
-            <button
-              onClick={() => setSelectedCategory(null)}
-              className={cn(
-                "px-3 py-1 rounded-full text-[10px] font-bold shrink-0 transition-all border",
-                !selectedCategory ? "bg-primary/20 border-primary/40 text-primary" : "bg-white/5 border-white/10 text-white/40"
-              )}
+        {/* Active quizzes modal */}
+        <AnimatePresence>
+          {showQuizList && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-md"
+              onClick={() => setShowQuizList(false)}
             >
-              Все
-            </button>
-            {categories.map(cat => (
-              <button
-                key={cat}
-                onClick={() => setSelectedCategory(selectedCategory === cat ? null : cat)}
-                className={cn(
-                  "px-3 py-1 rounded-full text-[10px] font-bold shrink-0 transition-all border",
-                  selectedCategory === cat ? "bg-primary/20 border-primary/40 text-primary" : "bg-white/5 border-white/10 text-white/40"
-                )}
+              <motion.div
+                initial={{ y: 100, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                exit={{ y: 100, opacity: 0 }}
+                transition={{ type: "spring", damping: 25, stiffness: 300 }}
+                className="w-full max-w-lg max-h-[85dvh] bg-background border border-white/10 rounded-t-[2rem] sm:rounded-[2rem] p-6 overflow-y-auto"
+                onClick={(e) => e.stopPropagation()}
               >
-                {cat}
-              </button>
-            ))}
-            <div className="ml-auto shrink-0">
-              <button
-                onClick={() => setSortBy(sortBy === "newest" ? "popular" : "newest")}
-                className="px-3 py-1 rounded-full text-[10px] font-bold bg-white/5 border border-white/10 text-white/40 hover:text-white/60 transition-colors"
-              >
-                {sortBy === "newest" ? "Новые" : "Популярные"}
-              </button>
-            </div>
-          </div>
-
-          {loading ? (
-            <div className="flex gap-4 mt-4 overflow-x-auto pb-2 snap-x snap-mandatory scrollbar-none md:grid md:grid-cols-3 md:overflow-x-visible">
-              {[0, 1, 2].map((i) => (
-                <div
-                  key={i}
-                  className="min-w-[200px] p-4 rounded-2xl bg-white/5 border border-white/10 animate-pulse snap-start"
-                >
-                  <div className="h-4 w-3/4 rounded bg-white/10" />
-                  <div className="flex gap-2 mt-3">
-                    <div className="h-4 w-14 rounded-lg bg-white/10" />
-                    <div className="h-4 w-12 rounded-lg bg-white/10" />
-                  </div>
-                  <div className="flex justify-between mt-4">
-                    <div className="h-3 w-16 rounded bg-white/10" />
-                    <div className="h-3 w-12 rounded bg-white/10" />
-                  </div>
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-xl font-black text-foreground">Активные квизы</h2>
+                  <button
+                    onClick={() => setShowQuizList(false)}
+                    className="p-2 hover:bg-white/5 rounded-full transition-colors"
+                  >
+                    <X className="w-5 h-5 opacity-40" />
+                  </button>
                 </div>
-              ))}
-            </div>
-          ) : filteredQuizzes.length === 0 ? (
-            <div className="mt-4 flex flex-col items-center gap-2 py-8 rounded-2xl bg-white/5 border border-white/10">
-              <HelpCircle className="w-8 h-8 text-white/20" />
-              <p className="text-sm text-white/40 font-medium">
-                {quizzes.length > 0 ? "Ничего не найдено" : "Нет активных квизов"}
-              </p>
-            </div>
-          ) : (
-            <div className="flex gap-4 mt-4 overflow-x-auto pb-2 snap-x snap-mandatory scrollbar-none md:grid md:grid-cols-3 md:overflow-x-visible">
-              {filteredQuizzes.map((quiz, i) => (
-                <motion.button
-                  key={quiz.id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: i * 0.08 }}
-                  onClick={() => handlePlayQuiz(quiz.id)}
-                  className="min-w-[200px] p-4 rounded-2xl bg-white/5 border border-white/10 hover:border-primary/40 transition-all text-left snap-start"
-                >
-                  <div className="text-sm font-black truncate text-foreground">{quiz.title}</div>
-                  <div className="flex gap-2 mt-2">
-                    <span className="px-2 py-0.5 rounded-lg bg-primary/20 text-primary text-[10px] font-bold">
-                      {quiz.category}
-                    </span>
-                    <span
+
+                {/* Search */}
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
+                  <input
+                    type="text"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Поиск квиза..."
+                    className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-white/5 border border-white/10 text-sm focus:border-primary/50 outline-none transition-colors placeholder:text-white/30"
+                  />
+                </div>
+
+                {/* Category pills + sort */}
+                <div className="flex items-center gap-2 mt-3 overflow-x-auto scrollbar-none pb-1">
+                  <button
+                    onClick={() => setSelectedCategory(null)}
+                    className={cn(
+                      "px-3 py-1 rounded-full text-[10px] font-bold shrink-0 transition-all border",
+                      !selectedCategory ? "bg-primary/20 border-primary/40 text-primary" : "bg-white/5 border-white/10 text-white/40"
+                    )}
+                  >
+                    Все
+                  </button>
+                  {categories.map(cat => (
+                    <button
+                      key={cat}
+                      onClick={() => setSelectedCategory(selectedCategory === cat ? null : cat)}
                       className={cn(
-                        "px-2 py-0.5 rounded-lg text-[10px] font-bold",
-                        difficultyColor[quiz.difficulty] ?? "bg-white/10 text-white/60",
+                        "px-3 py-1 rounded-full text-[10px] font-bold shrink-0 transition-all border",
+                        selectedCategory === cat ? "bg-primary/20 border-primary/40 text-primary" : "bg-white/5 border-white/10 text-white/40"
                       )}
                     >
-                      {quiz.difficulty}
-                    </span>
+                      {cat}
+                    </button>
+                  ))}
+                  <div className="ml-auto shrink-0">
+                    <button
+                      onClick={() => setSortBy(sortBy === "newest" ? "popular" : "newest")}
+                      className="px-3 py-1 rounded-full text-[10px] font-bold bg-white/5 border border-white/10 text-white/40 hover:text-white/60 transition-colors"
+                    >
+                      {sortBy === "newest" ? "Новые" : "Популярные"}
+                    </button>
                   </div>
-                  <div className="flex justify-between mt-3 text-[10px] font-bold uppercase tracking-widest text-white/40">
-                    <span>{quiz.questionsCount} вопр.</span>
-                    <span>{quiz.playersCount} игр.</span>
-                  </div>
-                </motion.button>
-              ))}
-            </div>
-          )}
-        </div>
+                </div>
 
-        {recentQuizzes.length > 0 && quizzes.some(q => recentQuizzes.includes(q.id)) && (
-          <div className="mt-6">
-            <h3 className="text-sm font-bold text-white/50 uppercase tracking-widest px-1">Недавно сыграно</h3>
-            <div className="flex gap-3 mt-2 overflow-x-auto scrollbar-none pb-1">
-              {recentQuizzes
-                .map(id => quizzes.find(q => q.id === id))
-                .filter(Boolean)
-                .map((quiz) => (
-                  <button
-                    key={quiz!.id}
-                    onClick={() => handlePlayQuiz(quiz!.id)}
-                    className="min-w-[150px] p-3 rounded-xl bg-white/5 border border-white/10 hover:border-primary/30 text-left shrink-0 transition-all"
-                  >
-                    <div className="text-xs font-bold truncate">{quiz!.title}</div>
-                    <div className="text-[10px] text-white/40 mt-1">{quiz!.category}</div>
-                  </button>
-                ))}
-            </div>
-          </div>
-        )}
+                {/* Quiz list */}
+                <div className="mt-4 space-y-3">
+                  {loading ? (
+                    [0, 1, 2].map((i) => (
+                      <div
+                        key={i}
+                        className="p-4 rounded-2xl bg-white/5 border border-white/10 animate-pulse"
+                      >
+                        <div className="h-4 w-3/4 rounded bg-white/10" />
+                        <div className="flex gap-2 mt-3">
+                          <div className="h-4 w-14 rounded-lg bg-white/10" />
+                          <div className="h-4 w-12 rounded-lg bg-white/10" />
+                        </div>
+                      </div>
+                    ))
+                  ) : filteredQuizzes.length === 0 ? (
+                    <div className="flex flex-col items-center gap-2 py-8 rounded-2xl bg-white/5 border border-white/10">
+                      <HelpCircle className="w-8 h-8 text-white/20" />
+                      <p className="text-sm text-white/40 font-medium">
+                        {quizzes.length > 0 ? "Ничего не найдено" : "Нет активных квизов"}
+                      </p>
+                    </div>
+                  ) : (
+                    filteredQuizzes.map((quiz, i) => (
+                      <motion.button
+                        key={quiz.id}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: i * 0.05 }}
+                        onClick={() => handlePlayQuiz(quiz.id)}
+                        className="w-full p-4 rounded-2xl bg-white/5 border border-white/10 hover:border-primary/40 transition-all text-left"
+                      >
+                        <div className="text-sm font-black truncate text-foreground">{quiz.title}</div>
+                        <div className="flex gap-2 mt-2">
+                          <span className="px-2 py-0.5 rounded-lg bg-primary/20 text-primary text-[10px] font-bold">
+                            {quiz.category}
+                          </span>
+                          <span
+                            className={cn(
+                              "px-2 py-0.5 rounded-lg text-[10px] font-bold",
+                              difficultyColor[quiz.difficulty] ?? "bg-white/10 text-white/60",
+                            )}
+                          >
+                            {quiz.difficulty}
+                          </span>
+                        </div>
+                        <div className="flex justify-between mt-3 text-[10px] font-bold uppercase tracking-widest text-white/40">
+                          <span>{quiz.questionsCount} вопр. · ⏱ {quiz.timePerQuestion}с</span>
+                          <span>{quiz.playersCount} игр.</span>
+                        </div>
+                      </motion.button>
+                    ))
+                  )}
+                </div>
+
+                {/* Recent quizzes */}
+                {recentQuizzes.length > 0 && quizzes.some(q => recentQuizzes.includes(q.id)) && (
+                  <div className="mt-6 pt-4 border-t border-white/10">
+                    <h3 className="text-sm font-bold text-white/50 uppercase tracking-widest">Недавно сыграно</h3>
+                    <div className="flex gap-3 mt-2 overflow-x-auto scrollbar-none pb-1">
+                      {recentQuizzes
+                        .map(id => quizzes.find(q => q.id === id))
+                        .filter(Boolean)
+                        .map((quiz) => (
+                          <button
+                            key={quiz!.id}
+                            onClick={() => handlePlayQuiz(quiz!.id)}
+                            className="min-w-[150px] p-3 rounded-xl bg-white/5 border border-white/10 hover:border-primary/30 text-left shrink-0 transition-all"
+                          >
+                            <div className="text-xs font-bold truncate">{quiz!.title}</div>
+                            <div className="text-[10px] text-white/40 mt-1">{quiz!.category}</div>
+                          </button>
+                        ))}
+                    </div>
+                  </div>
+                )}
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         <div className="grid grid-cols-3 gap-4 md:gap-8 pt-12 max-w-md mx-auto px-4">
           {[

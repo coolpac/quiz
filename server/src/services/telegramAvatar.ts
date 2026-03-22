@@ -50,7 +50,12 @@ const setCache = (key: string, url: string | null, ttlSeconds: number) => {
   cache.set(key, { url, expiresAt: Date.now() + ttlSeconds * 1000 });
 };
 
-export const getTelegramAvatarUrl = async (telegramId: bigint) => {
+export const getTelegramAvatarUrl = async (telegramId: bigint, platform?: string) => {
+  // Max users have a different user ID space — Telegram API can't resolve them
+  if (platform === "max") {
+    return null;
+  }
+
   const key = telegramId.toString();
   const cached = getCache(key);
   if (cached !== null || cache.has(key)) {

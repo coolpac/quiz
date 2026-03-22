@@ -86,6 +86,7 @@ const CreateQuizView = ({ onExit, quizId: editQuizId }: CreateQuizViewProps) => 
   const [activeQuestionIndex, setActiveQuestionIndex] = useState(0);
   const [isPublished, setIsPublished] = useState(false);
   const [quizUrl, setQuizUrl] = useState("");
+  const [maxQuizUrl, setMaxQuizUrl] = useState("");
   const [adminToken, setAdminToken] = useState<string | null>(null);
   const [createdQuizId, setCreatedQuizId] = useState<string | null>(null);
   const [isPublishing, setIsPublishing] = useState(false);
@@ -221,8 +222,8 @@ const CreateQuizView = ({ onExit, quizId: editQuizId }: CreateQuizViewProps) => 
         return "Укажите ссылку на канал для вопросов с подпиской";
       }
       const trimmed = channelUrl.trim();
-      if (!trimmed.startsWith("https://t.me/") && !trimmed.startsWith("@")) {
-        return "Укажите ссылку на канал в формате https://t.me/... или @channelname";
+      if (!trimmed.startsWith("https://t.me/") && !trimmed.startsWith("@") && !/^\d+$/.test(trimmed)) {
+        return "Укажите ссылку: https://t.me/..., @channelname или числовой ID чата Max";
       }
     }
     return null;
@@ -298,6 +299,7 @@ const CreateQuizView = ({ onExit, quizId: editQuizId }: CreateQuizViewProps) => 
         return;
       }
       setQuizUrl(response.deepLink);
+      setMaxQuizUrl(response.maxDeepLink ?? "");
       setAdminToken(response.adminToken ?? null);
       setCreatedQuizId(response.id ?? null);
       try {
@@ -689,10 +691,29 @@ const CreateQuizView = ({ onExit, quizId: editQuizId }: CreateQuizViewProps) => 
                         />
                       </div>
                       <div className="text-[10px] font-black uppercase tracking-widest opacity-40">
-                        Отсканируйте для входа
+                        Telegram
                       </div>
                     </div>
                   </div>
+
+                  {maxQuizUrl && (
+                    <div className="p-8 rounded-[2.5rem] bg-white dark:bg-white/5 border border-black/5 dark:border-white/10 shadow-2xl relative group overflow-hidden">
+                      <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-cyan-500/5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                      <div className="relative z-10 flex flex-col items-center gap-6">
+                        <div className="p-3 sm:p-4 bg-white rounded-3xl shadow-inner shadow-black/5">
+                          <QRCodeSVG
+                            value={maxQuizUrl}
+                            size={isMobile ? 150 : 200}
+                            level="H"
+                            includeMargin={false}
+                          />
+                        </div>
+                        <div className="text-[10px] font-black uppercase tracking-widest opacity-40">
+                          Max
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   <div className="flex flex-col gap-3">
                     <div className="flex items-center gap-2 p-3 sm:p-4 rounded-2xl bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10">
@@ -706,6 +727,22 @@ const CreateQuizView = ({ onExit, quizId: editQuizId }: CreateQuizViewProps) => 
                         <Copy className="w-4 h-4 sm:w-[18px] sm:h-[18px]" />
                       </button>
                     </div>
+                    {maxQuizUrl && (
+                      <div className="flex items-center gap-2 p-3 sm:p-4 rounded-2xl bg-blue-500/5 border border-blue-500/20">
+                        <div className="flex-1 truncate font-bold text-xs sm:text-sm text-blue-400 text-left">
+                          {maxQuizUrl}
+                        </div>
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(maxQuizUrl);
+                            pushToast("Ссылка Max скопирована", "success");
+                          }}
+                          className="p-2 hover:bg-blue-500/10 hover:text-blue-400 rounded-xl transition-all flex-shrink-0"
+                        >
+                          <Copy className="w-4 h-4 sm:w-[18px] sm:h-[18px]" />
+                        </button>
+                      </div>
+                    )}
                     {adminToken && (
                       <div className="flex items-center gap-2 p-4 rounded-2xl bg-primary/5 border border-primary/20">
                         <div className="flex-1 truncate font-bold text-sm text-primary text-left">
@@ -1378,7 +1415,7 @@ const CreateQuizView = ({ onExit, quizId: editQuizId }: CreateQuizViewProps) => 
                       </div>
                       <input
                         type="text"
-                        placeholder="https://t.me/your_channel или @channelname"
+                        placeholder="https://t.me/channel, @channel или ID чата Max"
                         value={channelUrl}
                         onChange={(e) => setChannelUrl(e.target.value)}
                         className={cn(
@@ -1394,7 +1431,7 @@ const CreateQuizView = ({ onExit, quizId: editQuizId }: CreateQuizViewProps) => 
                         </p>
                       )}
                       <p className="text-[10px] font-medium opacity-60">
-                        Формат: https://t.me/channelname или @channelname
+                        TG: https://t.me/channel или @channel | Max: числовой ID чата
                       </p>
                     </div>
                   )}

@@ -1093,15 +1093,18 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
                         </div>
 
                         <div className="flex flex-col items-center gap-6">
-                          <div className="p-6 bg-white rounded-[2.5rem] shadow-2xl shadow-primary/20">
-                            <QRCodeSVG
-                              value={qrQuiz?.deepLink ?? ""}
-                              size={200}
-                              level="H"
-                            />
-                          </div>
-
+                          {/* Telegram QR */}
                           <div className="w-full space-y-3">
+                            <div className="text-[10px] font-bold uppercase tracking-widest text-white/40 text-center">Telegram</div>
+                            <div className="flex justify-center">
+                              <div className="p-6 bg-white rounded-[2.5rem] shadow-2xl shadow-primary/20">
+                                <QRCodeSVG
+                                  value={qrQuiz?.deepLink ?? ""}
+                                  size={180}
+                                  level="H"
+                                />
+                              </div>
+                            </div>
                             <div className="flex items-center gap-2 p-4 rounded-2xl bg-white/5 border border-white/10">
                               <div className="flex-1 truncate font-bold text-xs text-white/40">
                                 {qrQuiz?.deepLink ?? "—"}
@@ -1127,27 +1130,42 @@ const AdminDashboard = ({ onExit, onCreateQuiz, quizId }: AdminDashboardProps) =
                                 }
                               }}
                             >
-                              <ExternalLink size={20} /> Открыть в TG
+                              <ExternalLink size={20} /> Открыть в Telegram
                             </Button>
                           </div>
 
+                          {/* Max QR */}
                           {qrQuiz?.maxDeepLink && (
-                            <div className="mt-4 pt-4 border-t border-white/10">
-                              <div className="text-[10px] font-bold uppercase tracking-widest text-white/40 mb-2">Max</div>
-                              <div className="bg-white rounded-2xl p-4 inline-block">
-                                <QRCodeSVG value={qrQuiz.maxDeepLink} size={160} />
+                            <div className="w-full space-y-3 pt-4 border-t border-white/10">
+                              <div className="text-[10px] font-bold uppercase tracking-widest text-white/40 text-center">Max</div>
+                              <div className="flex justify-center">
+                                <div className="p-6 bg-white rounded-[2.5rem] shadow-2xl shadow-blue-500/20">
+                                  <QRCodeSVG value={qrQuiz.maxDeepLink} size={180} level="H" />
+                                </div>
                               </div>
-                              <div className="mt-2">
+                              <div className="flex items-center gap-2 p-4 rounded-2xl bg-white/5 border border-white/10">
+                                <div className="flex-1 truncate font-bold text-xs text-white/40">
+                                  {qrQuiz.maxDeepLink}
+                                </div>
                                 <button
+                                  className="p-2 hover:bg-blue-500/10 hover:text-blue-400 rounded-xl transition-all"
                                   onClick={() => {
+                                    hapticSelection();
                                     navigator.clipboard.writeText(qrQuiz.maxDeepLink!);
                                     pushToast("Ссылка Max скопирована", "success");
                                   }}
-                                  className="flex items-center gap-2 mx-auto text-xs text-white/50 hover:text-white transition-colors"
                                 >
-                                  <Copy size={12} /> Копировать ссылку Max
+                                  <Copy size={16} />
                                 </button>
                               </div>
+                              <Button
+                                className="w-full py-6 text-lg gap-2"
+                                onClick={() => {
+                                  window.open(qrQuiz.maxDeepLink!, "_blank");
+                                }}
+                              >
+                                <ExternalLink size={20} /> Открыть в Max
+                              </Button>
                             </div>
                           )}
                         </div>

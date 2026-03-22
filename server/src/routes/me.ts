@@ -12,7 +12,7 @@ router.get("/", async (req, res) => {
     res.status(401).json({ error: "Unauthorized" });
     return;
   }
-  const avatarUrl = await getTelegramAvatarUrl(visitor.telegramId);
+  const avatarUrl = await getTelegramAvatarUrl(visitor.telegramId, req.platform);
   const response = {
     isAdmin: Boolean(req.isAdmin),
     avatarUrl: avatarUrl ?? null,

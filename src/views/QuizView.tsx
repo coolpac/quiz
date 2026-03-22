@@ -805,7 +805,7 @@ const QuizView = ({ quizId, onFinish, openedFromStartParam }: QuizViewProps) => 
         <div className="p-8 rounded-[2.5rem] bg-card/60 dark:bg-slate-900/70 border border-black/5 dark:border-white/10 backdrop-blur-lg text-center space-y-3">
           <div className="text-lg font-black">Квиз не выбран</div>
           <div className="text-xs text-muted-foreground font-medium">
-            Откройте квиз по ссылке бота
+            Откройте квиз по ссылке
           </div>
         </div>
       </div>

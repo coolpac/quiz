@@ -55,7 +55,9 @@ app.use("/api/quiz", quizRoutes);
 app.use("/api/stats", statsRoutes);
 app.use("/api/health", healthRoutes);
 app.use("/api/upload", uploadRoutes);
-app.use("/webhook/telegram", telegramWebhook);
+if (telegramWebhook) {
+  app.use("/webhook/telegram", telegramWebhook);
+}
 app.use("/webhook/max", maxWebhookRouter);
 
 const server = http.createServer(app);
