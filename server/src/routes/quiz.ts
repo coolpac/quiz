@@ -719,6 +719,7 @@ router.post("/:id/admin-start", async (req, res) => {
 });
 
 router.post("/:id/check-subscription", async (req, res) => {
+  console.log(`[check-sub] platform=${req.platform} quiz=${req.params.id} visitor=${req.visitor?.id}`);
   const id = getRouteId(req.params.id);
   const visitor = req.visitor;
 
@@ -742,6 +743,7 @@ router.post("/:id/check-subscription", async (req, res) => {
   }
 
   // Resolve channel ID based on platform
+  console.log(`[check-sub] channelUrl="${quiz.channelUrl}" maxChannelId="${quiz.maxChannelId}" isMax=${req.platform === "max"}`);
   let channelId: string | null = null;
   const isMax = req.platform === "max";
 
